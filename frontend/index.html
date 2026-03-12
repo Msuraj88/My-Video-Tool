@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Video Generator</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --container-bg: #161b22;
+            --text-color: #e6edf3;
+            --accent-color: #2f81f7;
+            --accent-hover: #1f6feb;
+            --border-color: #30363d;
+            --input-bg: #010409;
+            --success-color: #238636;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: var(--container-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 32px;
+            width: 100%;
+            max-width: 600px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 12px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-color);
+            font-family: inherit;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(47, 129, 247, 0.3);
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        button:disabled {
+            background-color: var(--border-color);
+            cursor: not-allowed;
+            color: #8b949e;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+            color: #8b949e;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: var(--accent-color);
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        #resultArea {
+            margin-top: 24px;
+            padding: 16px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .result-success {
+            background-color: rgba(35, 134, 54, 0.1);
+            border: 1px solid rgba(35, 134, 54, 0.4);
+        }
+
+        .result-error {
+            background-color: rgba(248, 81, 73, 0.1);
+            border: 1px solid rgba(248, 81, 73, 0.4);
+            color: #ff7b72;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background-color: var(--success-color);
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 500;
+            margin-top: 12px;
+            transition: opacity 0.2s;
+        }
+
+        .download-btn:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>AI Explainer Video Generator</h1>
+        
+        <div class="input-group">
+            <label for="scriptInput">Video Script</label>
+            <textarea id="scriptInput" placeholder="Enter your video script here... We'll automatically break it down into scenes, generate audio, create images of your explainer character, and stitch it all together!"></textarea>
+        </div>
+
+        <button id="generateBtn" onclick="generateVideo()">Generate Video</button>
+
+        <div id="loadingIndicator" class="loading">
+            <div class="spinner"></div>
+            <span>Generating your video pipeline... This may take a few minutes depending on script length.</span>
+        </div>
+
+        <div id="resultArea">
+            <h3 id="resultTitle" style="margin-top:0">Result</h3>
+            <p id="resultMessage"></p>
+            <div id="downloadAction"></div>
+        </div>
+    </div>
+
+    <script>
+        async function generateVideo() {
+            const scriptText = document.getElementById('scriptInput').value.trim();
+            const btn = document.getElementById('generateBtn');
+            const loading = document.getElementById('loadingIndicator');
+            const resultArea = document.getElementById('resultArea');
+            
+            if (!scriptText) {
+                alert("Please enter a script first.");
+                return;
+            }
+
+            // UI State: Loading
+            btn.disabled = true;
+            loading.style.display = 'block';
+            resultArea.style.display = 'none';
+
+            try {
+                // Adjust port to match your backend if needed
+                const response = await fetch('http://localhost:3000/api/generate-video', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ script: scriptText })
+                });
+
+                const data = await response.json();
+
+                // UI State: Complete
+                loading.style.display = 'none';
+                resultArea.style.display = 'block';
+
+                if (response.ok) {
+                    resultArea.className = 'result-success';
+                    document.getElementById('resultTitle').innerText = 'Success!';
+                    document.getElementById('resultMessage').innerText = `Processed ${data.scenes_processed} scenes successfully.`;
+                    
+                    // Note: Because the backend returns an absolute file path, downloading via browser 
+                    // requires the backend to serve that folder statically or provide a download token.
+                    // For local development, we'll display the path so the user can easily find it.
+                    document.getElementById('downloadAction').innerHTML = `
+                        <p style="font-size: 14px; margin-bottom: 4px;">Video saved locally at:</p>
+                        <code style="background:var(--input-bg); padding:4px 8px; border-radius:4px; display:block; word-break:break-all;">${data.final_video_path}</code>
+                    `;
+                } else {
+                    throw new Error(data.error || 'Failed to generate video');
+                }
+
+            } catch (error) {
+                // UI State: Error
+                loading.style.display = 'none';
+                resultArea.style.display = 'block';
+                resultArea.className = 'result-error';
+                document.getElementById('resultTitle').innerText = 'Error';
+                document.getElementById('resultMessage').innerText = error.message;
+                document.getElementById('downloadAction').innerHTML = '';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
