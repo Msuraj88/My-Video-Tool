@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const sharp = require('sharp');
+const { frameImageForVideo, TARGET_WIDTH, TARGET_HEIGHT } = require('../utils/imageFraming');
 
 // Ensure temp directory exists
 const tempImagesDir = path.join(__dirname, '../temp/images');
@@ -8,21 +8,21 @@ if (!fs.existsSync(tempImagesDir)) {
     fs.mkdirSync(tempImagesDir, { recursive: true });
 }
 
-// Target resolution for all scene images
-const TARGET_WIDTH = 1920;
-const TARGET_HEIGHT = 1080;
-
-// Prefer flux-dev or flux-pro for quality; avoid flux-schnell for final explainer images.
-// Set FLUX_MODEL to "dev" or "pro"; set FAL_FLUX_ENDPOINT to override URL (e.g. fal.run/fal-ai/flux-2-pro).
-const FLUX_MODEL = process.env.FLUX_MODEL || 'dev';
+// FLUX_MODEL: "flux2pro" (best HD), "pro1.1", "pro", "dev", "schnell". Use flux2pro for sharp, high-quality images.
+const FLUX_MODEL = (process.env.FLUX_MODEL || 'flux2pro').toLowerCase();
 const FAL_ENDPOINTS = {
+    flux2pro: 'https://fal.run/fal-ai/flux-2-pro',
+    pro11: 'https://fal.run/fal-ai/flux-pro/v1.1',
     schnell: 'https://fal.run/fal-ai/flux/schnell',
     dev: 'https://fal.run/fal-ai/flux/dev',
     pro: 'https://fal.run/fal-ai/flux/pro'
 };
-const fluxEndpoint = process.env.FAL_FLUX_ENDPOINT || (FAL_ENDPOINTS[FLUX_MODEL] || FAL_ENDPOINTS.dev);
-// More steps for dev/pro reduce blur and improve sharpness (28–35 typical for Flux).
-const numInferenceSteps = FLUX_MODEL === 'schnell' ? 4 : (parseInt(process.env.FLUX_INFERENCE_STEPS, 10) || 35);
+const fluxEndpoint = process.env.FAL_FLUX_ENDPOINT || FAL_ENDPOINTS[FLUX_MODEL] || FAL_ENDPOINTS.flux2pro;
+// Flux 2 Pro is zero-config; legacy flux uses steps (more steps = sharper).
+const numInferenceSteps = (FLUX_MODEL === 'schnell') ? 4 : (parseInt(process.env.FLUX_INFERENCE_STEPS, 10) || 35);
+const isFlux2OrPro11 = FLUX_MODEL === 'flux2pro' || FLUX_MODEL === 'pro11';
+
+const { generateAndSaveSceneImageGoogle } = require('./googleImage.service');
 
 /**
  * Calls Flux API (dev/pro preferred) and saves the generated image as a PNG.
@@ -32,26 +32,41 @@ const numInferenceSteps = FLUX_MODEL === 'schnell' ? 4 : (parseInt(process.env.F
  * @param {{ negativePrompt?: string }} [options] - Optional negative prompt to avoid unwanted styles.
  * @returns {Promise<string>} - The local absolute path where the image was saved.
  */
-async function generateAndSaveSceneImage(prompt, sceneName, options = {}) {
-    const apiKey = process.env.FLUX_API_KEY;
+async function generateAndSaveSceneImageFal(prompt, sceneName, options = {}) {
+    const apiKey = process.env.FAL_KEY || process.env.FLUX_API_KEY;
     if (!apiKey) {
-        throw new Error('FLUX_API_KEY environment variable is missing.');
+        throw new Error('FAL_KEY or FLUX_API_KEY environment variable is required for Fal image generation.');
     }
 
     try {
         console.log(`Generating image for scene: ${sceneName} (model: ${FLUX_MODEL})...`);
 
-        const body = {
-            prompt,
-            image_size: 'landscape_16_9',
-            num_inference_steps: numInferenceSteps,
-            guidance_scale: 3.5,
-            seed: 12345,
-            num_images: 1,
-            enable_safety_checker: true
-        };
-        if (options.negativePrompt && options.negativePrompt.trim()) {
-            body.negative_prompt = options.negativePrompt.trim();
+        // Flux 2 Pro / Flux Pro 1.1: HD models with simpler schema (no steps/guidance); request native 16:9 for sharpness.
+        const imageSize = { width: TARGET_WIDTH, height: TARGET_HEIGHT };
+        let body;
+        if (isFlux2OrPro11) {
+            body = {
+                prompt,
+                image_size: imageSize,
+                output_format: 'png',
+                enable_safety_checker: true
+            };
+            if (FLUX_MODEL === 'pro11') {
+                body.enhance_prompt = true; // Better composition and detail for Pro 1.1
+            }
+        } else {
+            body = {
+                prompt,
+                image_size: imageSize,
+                num_inference_steps: numInferenceSteps,
+                guidance_scale: 3.5,
+                seed: 12345,
+                num_images: 1,
+                enable_safety_checker: true
+            };
+            if (options.negativePrompt && options.negativePrompt.trim()) {
+                body.negative_prompt = options.negativePrompt.trim();
+            }
         }
 
         const response = await fetch(fluxEndpoint, {
@@ -93,24 +108,12 @@ async function generateAndSaveSceneImage(prompt, sceneName, options = {}) {
         const originalPath = path.join(tempImagesDir, `${baseName}_raw.png`);
         const finalPath = path.join(tempImagesDir, `${baseName}.png`);
 
-        // Save original image
         fs.writeFileSync(originalPath, buffer);
 
-        // Ensure final image is exactly 1920x1080; apply mild sharpen to avoid blur
-        try {
-            const metadata = await sharp(originalPath).metadata();
-            const needsResize = metadata.width !== TARGET_WIDTH || metadata.height !== TARGET_HEIGHT;
-            let pipeline = sharp(originalPath);
-            if (needsResize) {
-                pipeline = pipeline.resize(TARGET_WIDTH, TARGET_HEIGHT, { fit: 'cover', kernel: sharp.kernel.lanczos3 });
-            }
-            pipeline = pipeline.sharpen({ sigma: 0.5, m1: 1.0, m2: 0.5 });
-            await pipeline.toFile(finalPath);
-            console.log(`Successfully saved scene image to ${finalPath} (1920x1080, sharpened)`);
-        } catch (resizeError) {
-            console.error('Error ensuring 1920x1080 resolution, using original image:', resizeError.message);
-            fs.copyFileSync(originalPath, finalPath);
-        }
+        // Always output 1920x1080 without cropping; add consistent safe padding.
+        const fullHdBuffer = await frameImageForVideo(buffer);
+        fs.writeFileSync(finalPath, fullHdBuffer);
+        console.log(`Successfully saved scene image to ${finalPath} (${TARGET_WIDTH}x${TARGET_HEIGHT} padded no-crop frame)`);
 
         return finalPath;
 
@@ -118,6 +121,20 @@ async function generateAndSaveSceneImage(prompt, sceneName, options = {}) {
         console.error(`Error generating image for ${sceneName}:`, error.message);
         throw error; // Rethrow to let the caller handle it (e.g. retries)
     }
+}
+
+/**
+ * Dispatcher for image generation. Uses only the selected provider; no fallback.
+ */
+async function generateAndSaveSceneImage(prompt, sceneName, provider = 'fal', options = {}) {
+    const p = (provider || '').toLowerCase();
+    if (p === 'google') {
+        return await generateAndSaveSceneImageGoogle(prompt, sceneName, options);
+    }
+    if (p === 'flux' || p === 'fal') {
+        return await generateAndSaveSceneImageFal(prompt, sceneName, options);
+    }
+    throw new Error(`Unsupported image provider selected: ${provider}`);
 }
 
 module.exports = {

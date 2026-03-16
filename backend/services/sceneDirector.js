@@ -113,6 +113,69 @@ function extractNumbers(text) {
     return [...new Set(found)];
 }
 
+function titleCasePhrase(text) {
+    return String(text || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+/**
+ * Extracts short highlight phrases for in-scene text overlay.
+ * Keeps these concise because they are rendered as callout labels, not paragraphs.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function extractHighlightPhrases(text) {
+    if (!text || typeof text !== 'string') return [];
+
+    const trimmed = text.trim();
+    const highlights = [];
+    const pushUnique = (value) => {
+        const v = String(value || '').trim();
+        if (!v) return;
+        if (!highlights.some((item) => item.toLowerCase() === v.toLowerCase())) {
+            highlights.push(v);
+        }
+    };
+
+    const quotedMatches = trimmed.match(/"([^"]{2,60})"/g) || [];
+    quotedMatches.forEach((match) => pushUnique(match.replace(/^"|"$/g, '')));
+
+    const stepMatch = trimmed.match(/\bSTEP\s*\d+\b[^.!?\n]*/i);
+    if (stepMatch) {
+        pushUnique(stepMatch[0].replace(/\s+/g, ' ').trim());
+    }
+
+    const phrasePatterns = [
+        /\bstatement closing date\b/i,
+        /\bdue date\b/i,
+        /\blate fee\b/i,
+        /\bminimum payment\b/i,
+        /\bcredit utilization\b/i,
+        /\bcredit limit\b/i,
+        /\binterest rate\b/i,
+        /\bcredit score\b/i,
+        /\bstatement balance\b/i,
+        /\bmonthly payment\b/i,
+        /\btake time off\b/i,
+        /\bquit job\b/i,
+        /\bsay no\b/i
+    ];
+
+    phrasePatterns.forEach((pattern) => {
+        const match = trimmed.match(pattern);
+        if (match) pushUnique(titleCasePhrase(match[0]));
+    });
+
+    const stepTitleMatch = trimmed.match(/^[^:.\n]{4,70}(?=[:.\n])/);
+    if (stepTitleMatch && /\b(find|know|pay|save|avoid|build|grow|reduce|improve|use)\b/i.test(stepTitleMatch[0])) {
+        pushUnique(stepTitleMatch[0].trim());
+    }
+
+    return highlights.slice(0, 3);
+}
+
 /**
  * Classifies scene type from narration using keywords.
  * @param {string} text
@@ -263,6 +326,7 @@ function generateSceneDirection(sceneText) {
 module.exports = {
     generateSceneDirection,
     extractNumbers,
+    extractHighlightPhrases,
     detectVisualConcept,
     buildSceneDescriptionFromSentence,
     VISUAL_SCENE_TEMPLATES,

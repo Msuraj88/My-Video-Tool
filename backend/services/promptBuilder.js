@@ -7,7 +7,7 @@
 const { generateScenePrompt, buildFinalImagePrompt } = require('./scenePromptGenerator');
 const { NEGATIVE_PROMPT } = require('../config/imageStyleGuide');
 
-const NO_TEXT_REMINDER = ' Leave empty space at top for infographic text. No text or numbers inside the illustration.';
+const NO_TEXT_REMINDER = ' No text, numbers, or words anywhere in the image. No labels on any object. Single character only — never duplicate the character. Full-bleed composition: the illustration fills the entire frame edge to edge, no bordered panel, no patch, no inset. Character stands in a fully illustrated environment — NOT a plain or solid colour background. Dense composition, no large empty areas. Premium 2D animated cartoon quality with bold outlines and vibrant colours.';
 
 const FALLBACK_SCENE = 'narrator at desk with laptop and financial charts, minimal infographic elements, white background';
 

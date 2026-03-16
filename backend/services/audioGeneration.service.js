@@ -47,11 +47,13 @@ function getVoiceSettings(mode) {
     const presets = {
         explainer: { stability: 0.70, similarity_boost: 0.80, style: 0.25, use_speaker_boost: true },
         cinematic: { stability: 0.62, similarity_boost: 0.75, style: 0.38, use_speaker_boost: true },
-        shorts:    { stability: 0.68, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true },
-        dramatic:  { stability: 0.50, similarity_boost: 0.75, style: 0.65, use_speaker_boost: true }
+        shorts: { stability: 0.68, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true },
+        dramatic: { stability: 0.50, similarity_boost: 0.75, style: 0.65, use_speaker_boost: true }
     };
     return presets[mode] || presets.explainer;
 }
+
+const { generateAndSaveAudioGoogle } = require('./googleTTS.service');
 
 /**
  * Calls ElevenLabs API to generate TTS audio and saves it as an MP3.
@@ -62,14 +64,14 @@ function getVoiceSettings(mode) {
  * @param {string} [voiceId] - Optional ElevenLabs Voice ID (defaults to Adam).
  * @returns {Promise<{ filePath: string, duration: number }|{ error: string, details: any }>} - Path/duration, or error object
  */
-async function generateAndSaveAudio(text, sceneName, voiceId = DEFAULT_VOICE_ID) {
+async function generateAndSaveAudioEleven(text, sceneName, voiceId = DEFAULT_VOICE_ID) {
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey) {
         return { error: 'ELEVENLABS_API_KEY environment variable is missing.' };
     }
 
     try {
-        console.log(`Generating audio for scene '${sceneName}' using SDK & model '${MODEL_ID}' (mode: ${MODE})...`);
+        console.log(`Generating audio for scene '${sceneName}' using ElevenLabs model '${MODEL_ID}' (mode: ${MODE})...`);
 
         const elevenlabs = new ElevenLabsClient({ apiKey });
         const normalizedText = normalizeForTTS(text);
@@ -118,6 +120,20 @@ async function generateAndSaveAudio(text, sceneName, voiceId = DEFAULT_VOICE_ID)
         console.error(`ElevenLabs SDK Error for ${sceneName}:`, error.message);
         return { error: 'SDK error communicating with ElevenLabs', details: error.message };
     }
+}
+
+/**
+ * Dispatcher for audio generation. Uses only the selected provider; no fallback.
+ */
+async function generateAndSaveAudio(text, sceneName, provider = 'elevenlabs', options = {}) {
+    const p = (provider || '').toLowerCase();
+    if (p === 'google') {
+        return await generateAndSaveAudioGoogle(text, sceneName);
+    }
+    if (p === 'elevenlabs') {
+        return await generateAndSaveAudioEleven(text, sceneName, options.voiceId);
+    }
+    throw new Error(`Unsupported TTS provider selected: ${provider}`);
 }
 
 module.exports = {

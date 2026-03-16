@@ -12,8 +12,8 @@ function processScript(scriptText) {
     let currentScene = "";
     let currentWordCount = 0;
 
-    const MIN_MICRO_WORDS = 6;
-    const MAX_SCENE_WORDS = 18;
+    const MIN_MICRO_WORDS = 5;
+    const MAX_SCENE_WORDS = 16;
 
     for (let i = 0; i < sentences.length; i++) {
         const sentence = sentences[i].trim();

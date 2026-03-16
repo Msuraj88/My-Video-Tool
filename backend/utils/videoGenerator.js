@@ -15,6 +15,8 @@ if (!fs.existsSync(tempVideoDir)) {
 
 // Cinematic timing: buffer (seconds) after audio ends before video ends
 const POST_AUDIO_BUFFER_SECONDS = 0.6;
+// Short fades at scene boundaries to prevent click/pop when concatenating
+const AUDIO_FADE_DURATION = 0.03;
 
 /**
  * Merges a single image and an audio file into a video.
@@ -43,6 +45,10 @@ function createSceneVideo(imagePath, audioPath, sceneName) {
 
             const videoDurationSec = audioDurationSec + POST_AUDIO_BUFFER_SECONDS;
 
+            // Fade in/out at boundaries to prevent click when concatenating scenes
+            const fadeOutStart = Math.max(0, videoDurationSec - AUDIO_FADE_DURATION);
+            const afilter = `afade=t=in:st=0:d=${AUDIO_FADE_DURATION},afade=t=out:st=${fadeOutStart}:d=${AUDIO_FADE_DURATION}`;
+
             // Build video: duration = audio + buffer (image holds for 0.6s after audio ends)
             ffmpeg()
                 // Input 1: The still image
@@ -52,12 +58,13 @@ function createSceneVideo(imagePath, audioPath, sceneName) {
                 // Input 2: The audio track
                 .input(audioPath)
 
-                // Output options: explicit duration for cinematic buffer
+                // Output options: explicit duration, short fades to avoid tick/click at scene changes
                 .outputOptions([
                     '-c:v libx264',       // Use H.264 video codec
                     '-tune stillimage',   // Optimize for still image
                     '-c:a aac',           // Use AAC audio codec
                     '-b:a 192k',          // Audio bitrate
+                    '-af', afilter,       // Fade in/out to prevent concatenation clicks
                     '-pix_fmt yuv420p',   // Pixel format for compatibility
                     '-t', String(videoDurationSec)  // Video length = audio + 0.6s buffer
                 ])

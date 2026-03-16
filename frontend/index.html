@@ -166,6 +166,23 @@
             <textarea id="scriptInput" placeholder="Enter your video script here... We'll automatically break it down into scenes, generate audio, create images of your explainer character, and stitch it all together!"></textarea>
         </div>
 
+        <div style="display: flex; gap: 16px; margin-bottom: 24px;">
+            <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                <label for="ttsProvider">TTS Provider</label>
+                <select id="ttsProvider" style="width: 100%; padding: 10px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-color);">
+                    <option value="elevenlabs">ElevenLabs</option>
+                    <option value="google">Google Cloud TTS</option>
+                </select>
+            </div>
+            <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                <label for="imageProvider">Image Provider</label>
+                <select id="imageProvider" style="width: 100%; padding: 10px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-color);">
+                    <option value="fal">Fal (Flux)</option>
+                    <option value="google">Google (Imagen)</option>
+                </select>
+            </div>
+        </div>
+
         <button id="generateBtn" onclick="generateVideo()">Generate Video</button>
 
         <div id="loadingIndicator" class="loading">
@@ -183,6 +200,8 @@
     <script>
         async function generateVideo() {
             const scriptText = document.getElementById('scriptInput').value.trim();
+            const ttsProvider = document.getElementById('ttsProvider').value;
+            const imageProvider = document.getElementById('imageProvider').value;
             const btn = document.getElementById('generateBtn');
             const loading = document.getElementById('loadingIndicator');
             const resultArea = document.getElementById('resultArea');
@@ -204,7 +223,11 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ script: scriptText })
+                    body: JSON.stringify({ 
+                        script: scriptText,
+                        ttsProvider: ttsProvider,
+                        imageProvider: imageProvider
+                    })
                 });
 
                 const data = await response.json();
@@ -226,7 +249,9 @@
                         <code style="background:var(--input-bg); padding:4px 8px; border-radius:4px; display:block; word-break:break-all;">${data.final_video_path}</code>
                     `;
                 } else {
-                    throw new Error(data.error || 'Failed to generate video');
+                    const msg = data.error || 'Failed to generate video';
+                    const details = (data.details && typeof data.details === 'string') ? ` — ${data.details}` : (data.details?.details ? ` — ${data.details.details}` : '');
+                    throw new Error(msg + details);
                 }
 
             } catch (error) {

@@ -22,9 +22,28 @@ const MAX_TEXT_WIDTH = CANVAS_WIDTH - 200;
 const TITLE_FONT_FAMILY = "'Montserrat','Poppins','Arial',sans-serif";
 const NUMBER_FONT_FAMILY = "'Montserrat','Poppins','Arial',sans-serif";
 
-const FILL_COLOR = '#ffffff';
-const STROKE_COLOR = '#000000';
+const FILL_COLOR = '#C0E2FF';
+const STROKE_COLOR = '#111C2D';
 const STROKE_WIDTH = 6;
+
+/** Normalize overlay text while keeping useful punctuation for highlighted phrases. */
+function normalizeOverlayText(text) {
+    if (text == null || typeof text !== 'string') return '';
+    return text
+        .replace(/[“”]/g, '"')
+        .replace(/[‘’]/g, "'")
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function stripPunctuationForNumberOverlay(text) {
+    if (text == null || typeof text !== 'string') return '';
+    return text
+        .replace(/\.{2,}/g, ' ')
+        .replace(/[.,;:!?'"\-–—]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
 
 /**
  * Splits text into lines so that each line fits within maxWidth.
@@ -67,6 +86,69 @@ function drawTextLine(ctx, text, x, y) {
     ctx.fillText(text, x, y);
 }
 
+function drawRoundedRect(ctx, x, y, width, height, radius, fillStyle, strokeStyle) {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+
+    ctx.fillStyle = fillStyle;
+    ctx.fill();
+
+    if (strokeStyle) {
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = strokeStyle;
+        ctx.stroke();
+    }
+}
+
+function drawHighlightCards(ctx, highlights) {
+    if (!Array.isArray(highlights) || highlights.length === 0) return;
+
+    const cards = highlights.slice(0, 2);
+    const positions = [
+        { x: 90, y: 760, align: 'left' },
+        { x: CANVAS_WIDTH - 90, y: 860, align: 'right' }
+    ];
+
+    cards.forEach((highlight, index) => {
+        const text = normalizeOverlayText(highlight);
+        if (!text) return;
+
+        ctx.font = `700 42px ${TITLE_FONT_FAMILY}`;
+        const maxCardWidth = 620;
+        const paddingX = 28;
+        const paddingY = 22;
+        const lines = wrapText(ctx, text, maxCardWidth - paddingX * 2);
+        const lineHeight = 50;
+        const textWidth = Math.max(...lines.map((line) => ctx.measureText(line).width), 0);
+        const cardWidth = Math.min(maxCardWidth, Math.max(300, textWidth + paddingX * 2));
+        const cardHeight = lines.length * lineHeight + paddingY * 2;
+        const pos = positions[index] || positions[positions.length - 1];
+        const x = pos.align === 'right' ? pos.x - cardWidth : pos.x;
+        const y = pos.y;
+
+        drawRoundedRect(ctx, x, y, cardWidth, cardHeight, 24, 'rgba(15, 28, 45, 0.84)', 'rgba(255,255,255,0.26)');
+
+        ctx.shadowColor = 'rgba(0,0,0,0)';
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+
+        lines.forEach((line, lineIndex) => {
+            ctx.fillText(line, x + paddingX, y + paddingY + lineIndex * lineHeight + 18);
+        });
+    });
+}
+
 /**
  * Main overlay function
  */
@@ -76,9 +158,14 @@ async function overlaySceneText(imagePath, sceneData) {
         throw new Error('overlaySceneText: image path missing or file not found');
     }
 
-    const headline = sceneData?.headline ? String(sceneData.headline).trim() : '';
+    const headline = sceneData?.headline
+        ? normalizeOverlayText(String(sceneData.headline))
+        : '';
+    const highlights = Array.isArray(sceneData?.highlights)
+        ? sceneData.highlights.map((value) => normalizeOverlayText(value)).filter(Boolean)
+        : [];
     const numbers = Array.isArray(sceneData?.numbers)
-        ? sceneData.numbers.map(n => formatNumber(n)).filter(Boolean)
+        ? sceneData.numbers.map(n => stripPunctuationForNumberOverlay(formatNumber(n))).filter(Boolean)
         : [];
 
     const dir = path.dirname(imagePath);
@@ -121,6 +208,8 @@ async function overlaySceneText(imagePath, sceneData) {
 
         currentY += 30;
     }
+
+    drawHighlightCards(ctx, highlights);
 
     /*
     -----------------------------
