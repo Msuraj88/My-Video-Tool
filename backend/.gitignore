@@ -6,3 +6,8 @@ coverage/
 .DS_Store
 .gen-lang-client-0244825199-8b3f8c52a02a.json
 .service-account.json
+
+backend/*.json
+backend/service-account*.json
+backend/gen-lang-client-*.json
+backend/.env
