@@ -1,114 +1,243 @@
 /**
  * OpenAI-powered scene prompt generator.
- * Converts narration into rich visual scene descriptions.
- *
- * Target style: premium animated cartoon, like bitmoji or animated explainer series.
- * - Character fully integrated into a scene-appropriate environment.
- * - Dynamic poses and expressions that match the narration mood.
- * - Rich detailed backgrounds, not plain/solid colour.
- * - Full-bleed 16:9 composition, no patches or panels.
+ * 1) Understand the FULL script (visual plan).
+ * 2) Write each scene brief from that plan so concepts stay coherent.
  */
 
 const OpenAI = require('openai');
-const { description: CHARACTER_DESCRIPTION } = require('../config/characterProfile');
+const { CHARACTER_NAME, CHARACTER_LOCK } = require('../config/characterProfile');
+const { STYLE_LOCK } = require('../config/imageStyleGuide');
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
 const MODEL = 'gpt-4o-mini';
-const TEMPERATURE = 0.4;
+const TEMPERATURE = 0.35;
 
-const SYSTEM_PROMPT = `You are a storyboard director for a premium animated explainer video series. Your job is to write ONE vivid, detailed visual scene description for each narration line. The image generator will use your description to create a polished animated cartoon scene.
+const TEXT_RULE = `TEXT ON IMAGE — most scenes have ZERO writing. Add text only when the visual plan marks needsText, or when a single key number must appear (account balance, Rs amount, a chart value). If text is used: write it in Hinglish or English only (example: "Rs 50,000", "locker", "safe", "bank balance") — NEVER Devanagari / pure Hindi letters. Place that one label ONCE on the single most meaningful object (thought bubble, phone screen, or one chart). No labels on lockers, furniture, books, or walls. Do not write the full narration sentence.`;
 
-TARGET ART STYLE:
-- Premium 2D animated cartoon quality, similar to professional animated YouTube explainer series or Bitmoji Adventures.
-- Bold clean black outlines on all characters and objects.
-- Smooth flat shading with subtle shadows and highlights.
-- Vibrant, rich colours – not dull or washed out.
-- Fully detailed scene-appropriate environment, NOT a plain white or grey background.
-- The illustration fills the entire 16:9 frame edge to edge. No borders. No panels.
+const SYSTEM_PROMPT = `You are a storyboard director for a conceptual 2D-outline explainer series.
 
-THE CHARACTER:
-${CHARACTER_DESCRIPTION}
-- He is the ONLY person in every scene. Never two characters, never duplicated.
-- He is fully integrated INTO the environment – not floating in front of a plain background.
-- His EXPRESSION and POSE must match the mood of THIS specific scene (see pose guide below).
+THE CHARACTER AND ART STYLE ARE ALREADY LOCKED. Do not describe hair, skin, outfit, or line style. Do not rename or redesign the character. He is always ${CHARACTER_NAME}, the same young man in the navy sweater.
 
-POSE AND EXPRESSION GUIDE – vary these to match the narration mood:
-- Explaining concept → standing, one hand open-palm gesture toward the key visual element, neutral/warm smile.
-- Revealing something important → wide eyes, one eyebrow raised, leaning slightly forward, pointing finger at object.
-- Positive outcome or achievement → confident wide smile, arms spread open or fist raised, upright posture.
-- Warning / deadline / risk → serious focused expression, one hand raised palm-out as a stop gesture, or pointing directly at a warning symbol.
-- Thinking / considering options → hand on chin, slightly tilted head, eyes looking at the choices displayed around him.
-- Presenting or showing data → holding or gesturing toward a floating chart, tablet, or visual panel beside him.
-- Excited / enthusiastic → leaning into camera, big grin, both hands gesturing outward.
+You receive (1) a visual plan of the WHOLE video and (2) the current scene. Design this frame so it continues that story — not an isolated clip.
 
-SCENE ENVIRONMENT GUIDE – choose the environment that best fits the narration topic:
-- Finance / money / banking → modern bank interior or sleek open-plan office with city skyline view through glass windows.
-- Saving / goals / future → warm living room, outdoor park or garden, or bright clean home.
-- Deadlines / dates / calendar → clean home office desk, wall calendar in background, clocks.
-- Choices / decisions / options → crossroads in a road, three doors, branching path.
-- Debt / credit / cards → financial office, credit card graphics in environment, abstract financial space.
-- Shopping / spending → retail store interior, mall corridor, or colorful product displays.
-- Investment / growth → stock exchange floor, ascending bar-chart environment, green financial landscape.
-- Steps / processes → numbered path, staircase, or milestone road.
-- Achievement / success → podium, trophy, city skyline celebrating moment.
-- General explanation → modern studio or classroom with whiteboard or large display screen.
+ART DIRECTION:
+- Clean 2D vector outline, bold black outlines, flat cel-shading, muted cool blues and grays.
+- Conceptual objects explain the idea. Prefer objects over words.
+- Character lives inside a simplified environment.
 
-BACKGROUND AND PROPS:
-- Background must be a FULL ILLUSTRATED ENVIRONMENT, not a solid colour. Show walls, windows, furniture, or outdoor scenery.
-- Include 3–6 scene-relevant props around the character that visually represent the narration concepts.
-- Props should be large, clear and recognisable (credit card shape, piggy bank, calendar with circled date, stack of bills, glowing chart, shield, etc.).
-- Use illustrated floating elements, connected by arrows or visual lines where helpful, to show relationships between concepts.
-- Props fill the left side, right side, or background so the whole frame is used.
+WHAT TO DESIGN:
+1. SETTING — follow the plan's setting for this scene; keep recurring locations consistent with the throughline.
+2. POSE + MOOD — match this scene's role in the story. Vary pose vs other scenes.
+3. CONCEPT VISUALS — 2–4 large objects from the plan (locker, phone, house, shop, coins, chart, thought bubble). Unlabeled unless needsText.
+4. TEXT — ${TEXT_RULE}
+5. COMPOSITION — 16:9, one hero only.
 
-CRITICAL RULES:
-1. NO TEXT, NUMBERS, OR LABELS in the image. Describe shapes and objects only (e.g. "calendar with one date circled", NOT "calendar showing '15th'"). All text is added later as overlay.
-2. ONE character only. Never "same character twice", never "two people".
-3. FULL-BLEED: background extends to all four edges. No central panel, no patch, no inset, no frame within a frame.
-4. Character must be IN the scene environment – standing on a floor, in a room, outdoors, not floating.
-5. Output ONLY the scene description. No intro, no meta-commentary, no formatting.`;
+Output ONLY the scene brief. No preamble.`;
 
-const CHARACTER_STYLE_BLOCK = `CARTOON CHARACTER (same every scene): ${CHARACTER_DESCRIPTION}
+const FALLBACK_SCENE = `${CHARACTER_NAME} sits on a gray sofa in a dim living room at night, navy sweater, laptop on a brown pillow, calm half-lidded expression. Simple unlabeled objects. No captions.`;
 
-ART DIRECTION: Premium 2D animated cartoon, animated explainer series quality. Bold outlines, smooth flat shading, vibrant rich colours. Character in a fully illustrated environment — NOT plain background. Scene fills entire frame edge to edge. No text, numbers, or labels on any element.`;
-
-const FALLBACK_SCENE = 'The cartoon narrator stands in a modern open-plan office with floor-to-ceiling windows showing a city skyline. He holds an open laptop toward the viewer, smiling confidently. Colourful floating icons and document shapes surround him. Warm lighting from the windows.';
-
-/**
- * Builds the final image prompt from the generated scene visual.
- */
-function buildFinalImagePrompt(sceneVisual) {
-    const visual = (sceneVisual && sceneVisual.trim()) ? sceneVisual.trim() : FALLBACK_SCENE;
-    return `${visual}
-
-${CHARACTER_STYLE_BLOCK}`;
+function hashScenes(scenes) {
+    return (scenes || [])
+        .map((s) => `${s.sceneId}:${String(s.text || '').trim()}`)
+        .join('|');
 }
 
-/**
- * Calls OpenAI to get a visual scene description, then builds the full image prompt.
- * @param {string} sentence - Narration text for this scene.
- * @returns {Promise<string>} - Full image prompt ready for Imagen.
- */
-async function generateScenePrompt(sentence) {
+function extractKeyFigures(text) {
+    if (!text || typeof text !== 'string') return [];
+    const found = [];
+    const rupee = text.match(/₹\s*[\d,]+(?:\.\d+)?/g);
+    const dollar = text.match(/\$\s*[\d,]+(?:\.\d+)?/g);
+    const percent = text.match(/\d+(?:\.\d+)?%/g);
+    if (rupee) found.push(...rupee.map((s) => s.replace(/\s+/g, '').replace('₹', 'Rs ')));
+    if (dollar) found.push(...dollar.map((s) => s.replace(/\s+/g, '')));
+    if (percent) found.push(...percent);
+    return [...new Set(found)].slice(0, 2);
+}
+
+function toHinglishLabel(value) {
+    if (!value) return null;
+    return String(value)
+        .replace(/₹/g, 'Rs ')
+        .replace(/[\u0900-\u097F]+/g, '')
+        .replace(/\s+/g, ' ')
+        .trim() || null;
+}
+
+async function analyzeScriptVisualPlan(script, scenes) {
+    const list = (scenes || [])
+        .map((s, i) => `${i + 1}. [${s.sceneId}] ${s.text}`)
+        .join('\n');
+
+    const fallback = {
+        storySummary: String(script || '').slice(0, 400),
+        throughline: 'Same character explains the idea with clear conceptual objects.',
+        world: 'Muted 2D outline interiors that fit the topic.',
+        scenes: (scenes || []).map((s) => ({
+            sceneId: s.sceneId,
+            roleInStory: 'beat',
+            concept: s.text,
+            setting: 'simplified interior that fits the line',
+            keyObjects: [],
+            needsText: extractKeyFigures(s.text).length > 0,
+            textOnImage: extractKeyFigures(s.text)[0] || null,
+            textPlacement: extractKeyFigures(s.text).length ? 'thought bubble or phone screen' : null,
+        })),
+        sourceHash: hashScenes(scenes),
+    };
+
+    try {
+        const response = await openai.chat.completions.create({
+            model: MODEL,
+            temperature: 0.3,
+            response_format: { type: 'json_object' },
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are a conceptual storyboard director. Read the COMPLETE script first, understand the argument and visual story, then plan every scene so images form one coherent film — not disconnected clips.
+
+Return JSON only:
+{
+  "storySummary": "2-4 sentences: what the whole video is saying",
+  "throughline": "one-line visual story",
+  "world": "recurring places and props to reuse",
+  "scenes": [
+    {
+      "sceneId": "scene-001",
+      "roleInStory": "hook | setup | misconception | twist | example | payoff",
+      "concept": "what THIS frame must make the viewer understand, in English",
+      "setting": "specific place, consistent with the world",
+      "keyObjects": ["2-4 objects that show the idea"],
+      "needsText": false,
+      "textOnImage": null,
+      "textPlacement": null
+    }
+  ]
+}
+
+Rules:
+- needsText is true ONLY if a number, app UI, or a short label is required to understand the beat (e.g. a bank balance). Most scenes: needsText false, textOnImage null.
+- textOnImage must be Hinglish or English (Rs 50,000, locker, bank balance). Never Devanagari.
+- Keep the same character world across scenes. Vary pose and setting as the story moves.
+- scenes array MUST include every sceneId from the input, in order.`,
+                },
+                {
+                    role: 'user',
+                    content: `FULL SCRIPT:\n${script || ''}\n\nNUMBERED SCENES:\n${list}`,
+                },
+            ],
+        });
+
+        const raw = response.choices[0]?.message?.content;
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (!parsed || !Array.isArray(parsed.scenes)) {
+            return fallback;
+        }
+
+        const byId = new Map(parsed.scenes.map((s) => [s.sceneId, s]));
+        parsed.scenes = (scenes || []).map((s) => {
+            const planned = byId.get(s.sceneId) || {};
+            const needsText = Boolean(planned.needsText);
+            return {
+                sceneId: s.sceneId,
+                roleInStory: planned.roleInStory || 'beat',
+                concept: planned.concept || s.text,
+                setting: planned.setting || fallback.world,
+                keyObjects: Array.isArray(planned.keyObjects) ? planned.keyObjects.slice(0, 4) : [],
+                needsText,
+                textOnImage: needsText ? toHinglishLabel(planned.textOnImage) : null,
+                textPlacement: needsText ? (planned.textPlacement || 'one object only') : null,
+            };
+        });
+        parsed.sourceHash = hashScenes(scenes);
+        console.log('Visual plan ready:', parsed.throughline || parsed.storySummary);
+        return parsed;
+    } catch (err) {
+        console.error('Script visual plan failed, using fallback:', err.message);
+        return fallback;
+    }
+}
+
+async function ensureVisualPlan(project) {
+    const hash = hashScenes(project.scenes);
+    if (project.visualPlan && project.visualPlan.sourceHash === hash) {
+        return project.visualPlan;
+    }
+    console.log('Understanding complete script before writing scene prompts...');
+    project.visualPlan = await analyzeScriptVisualPlan(project.script, project.scenes);
+    return project.visualPlan;
+}
+
+function findPlannedScene(visualPlan, sceneId, sceneIndex) {
+    const list = visualPlan?.scenes || [];
+    return list.find((s) => s.sceneId === sceneId) || list[sceneIndex] || null;
+}
+
+function buildFinalImagePrompt(sceneVisual, narration = '', planned = null) {
+    const visual = (sceneVisual && sceneVisual.trim()) ? sceneVisual.trim() : FALLBACK_SCENE;
+    const line = (narration && narration.trim()) ? narration.trim() : '';
+    const figures = extractKeyFigures(line);
+    const needsText = planned ? Boolean(planned.needsText) : figures.length > 0;
+    const label = needsText
+        ? (toHinglishLabel(planned?.textOnImage) || figures[0] || null)
+        : null;
+
+    const textLine = label
+        ? `ON-IMAGE TEXT (Hinglish/English only, once): "${label}" at ${planned?.textPlacement || 'one object'}. No other writing. No Devanagari.\n`
+        : 'ON-IMAGE TEXT: none. No letters, no Hindi script, no captions, no labels on objects.\n';
+    const narrationLine = line ? `NARRATION TO VISUALIZE: "${line}"\n` : '';
+    const conceptLine = planned?.concept ? `STORY BEAT: ${planned.concept}\n` : '';
+
+    return `${STYLE_LOCK}
+
+${CHARACTER_LOCK}
+
+${narrationLine}${conceptLine}${textLine}
+${TEXT_RULE}
+
+SCENE (pose, setting, conceptual objects — do not change the character design):
+${visual}
+
+Consistency: same character, same navy sweater, same 2D outline style as every other scene. One hero only. Explain with objects. Writing only if listed above, in Hinglish or English.`;
+}
+
+async function generateScenePrompt(sentence, options = {}) {
     const trimmed = (sentence && typeof sentence === 'string') ? sentence.trim() : '';
+    const visualPlan = options.visualPlan || null;
+    const planned = findPlannedScene(visualPlan, options.sceneId, options.sceneIndex);
+    const figures = extractKeyFigures(trimmed);
+    const needsText = planned ? Boolean(planned.needsText) : figures.length > 0;
+    const label = needsText
+        ? (toHinglishLabel(planned?.textOnImage) || figures[0] || null)
+        : null;
 
-    const userPrompt = `Write ONE detailed visual scene description for the narration below. Follow all the rules in your instructions.
+    const neighbors = (visualPlan?.scenes || [])
+        .map((s, i) => `${i + 1}. [${s.roleInStory}] ${s.concept}`)
+        .join('\n');
 
-NARRATION: "${trimmed || 'An instructor explains a key concept to the viewer.'}"
+    const userPrompt = `Write the scene brief for THIS beat of the full story. Do not describe hair, clothes, or art style.
 
-WHAT TO INCLUDE IN YOUR DESCRIPTION:
-1. ENVIRONMENT: Name a specific illustrated setting that fits this topic (office, home, outdoor, financial space, etc.) — include background details (walls, windows, scenery, furniture, lighting). NOT a plain background.
-2. CHARACTER POSE + EXPRESSION: Describe exactly how the character looks and what he is doing in this moment — his body position, hand gesture, facial expression, and what he is interacting with. Match the mood of the narration.
-3. PROPS AND CONCEPT VISUALS: List 3–6 large clear props or illustrated elements that represent the core concepts in the narration. Place them around the character to fill the frame. Show connections (arrows, grouping) between related objects.
-4. FULL-BLEED COMPOSITION: Character and all elements fill the entire frame left-to-right, top-to-bottom. No empty areas. No central panel or patch.
+WHOLE-STORY SUMMARY: ${visualPlan?.storySummary || 'A conceptual explainer.'}
+THROUGHLINE: ${visualPlan?.throughline || 'Same character, conceptual objects.'}
+WORLD: ${visualPlan?.world || 'Muted 2D outline interiors.'}
 
-RULES:
-- No text, numbers, or labels on any object. Shape and visual only.
-- One character only. Same guy every scene.
-- Rich illustrated background (not solid colour).
-- Output the description only. No preamble.`;
+ALL BEATS:
+${neighbors || '(single scene)'}
+
+CURRENT SCENE ID: ${options.sceneId || 'scene'}
+CURRENT NARRATION: "${trimmed || 'He explains a key idea.'}"
+ROLE IN STORY: ${planned?.roleInStory || 'beat'}
+CONCEPT TO SHOW: ${planned?.concept || trimmed}
+SETTING: ${planned?.setting || 'fit the narration'}
+KEY OBJECTS: ${(planned?.keyObjects || []).join(', ') || 'choose 2-4 conceptual objects'}
+${label
+        ? `TEXT: one Hinglish/English label "${label}" on ${planned?.textPlacement || 'one object'}. No Devanagari. Nothing else written.`
+        : 'TEXT: none. No writing anywhere in the image.'}
+
+Include setting, ${CHARACTER_NAME}'s pose/mood, and the conceptual objects. 16:9, one hero.
+Output the brief only.`;
 
     let sceneVisual;
     try {
@@ -130,7 +259,7 @@ RULES:
         sceneVisual = FALLBACK_SCENE;
     }
 
-    const imagePrompt = buildFinalImagePrompt(sceneVisual);
+    const imagePrompt = buildFinalImagePrompt(sceneVisual, trimmed, planned);
 
     console.log('Scene narration:', trimmed || '(empty)');
     console.log('Generated scene visual:', sceneVisual);
@@ -140,5 +269,8 @@ RULES:
 
 module.exports = {
     generateScenePrompt,
-    buildFinalImagePrompt
+    buildFinalImagePrompt,
+    analyzeScriptVisualPlan,
+    ensureVisualPlan,
+    hashScenes,
 };

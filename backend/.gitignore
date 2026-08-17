@@ -2,6 +2,7 @@ node_modules/
 .env
 .serverless/
 temp/
+projects/
 coverage/
 .DS_Store
 .gen-lang-client-0244825199-8b3f8c52a02a.json

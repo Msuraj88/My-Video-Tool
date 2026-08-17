@@ -3,12 +3,8 @@ const { Readable } = require('stream');
 const fs = require('fs');
 const path = require('path');
 const { getAudioDurationInSeconds } = require('get-audio-duration');
-
-// Ensure temp directory exists
-const tempAudioDir = path.join(__dirname, '../temp/audio');
-if (!fs.existsSync(tempAudioDir)) {
-    fs.mkdirSync(tempAudioDir, { recursive: true });
-}
+const { audioDir } = require('../utils/tempDirs');
+const { TTS_PACE, flattenForEvenPace } = require('../config/ttsPace');
 
 // You can change to a specific voice ID (e.g., Adam, Rachel, etc.)
 // Defaulting to "Adam" voice ID for now
@@ -28,13 +24,7 @@ const MODE = process.env.NARRATION_MODE || "explainer";
  * @returns {string} - Normalized text safe for TTS
  */
 function normalizeForTTS(text) {
-    if (text == null || typeof text !== 'string') return '';
-    return text
-        .trim()
-        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // strip control chars, keep \t \n \r
-        .replace(/[ \t]+/g, ' ')                            // collapse spaces/tabs only (keep newlines for pacing)
-        .replace(/\n\s*\n\s*\n+/g, '\n\n')                 // max 2 consecutive newlines
-        .trim();
+    return flattenForEvenPace(text);
 }
 
 /**
@@ -43,17 +33,18 @@ function normalizeForTTS(text) {
  * @param {string} mode - "explainer" | "cinematic" | "shorts" | "dramatic"
  * @returns {{ stability: number, similarity_boost: number, style: number, use_speaker_boost: boolean }}
  */
-function getVoiceSettings(mode) {
-    const presets = {
-        explainer: { stability: 0.70, similarity_boost: 0.80, style: 0.25, use_speaker_boost: true },
-        cinematic: { stability: 0.62, similarity_boost: 0.75, style: 0.38, use_speaker_boost: true },
-        shorts: { stability: 0.68, similarity_boost: 0.75, style: 0.30, use_speaker_boost: true },
-        dramatic: { stability: 0.50, similarity_boost: 0.75, style: 0.65, use_speaker_boost: true }
+function getVoiceSettings() {
+    return {
+        stability: TTS_PACE.elevenStability,
+        similarity_boost: TTS_PACE.elevenSimilarity,
+        style: TTS_PACE.elevenStyle,
+        use_speaker_boost: true,
+        speed: TTS_PACE.elevenSpeed,
     };
-    return presets[mode] || presets.explainer;
 }
 
 const { generateAndSaveAudioGoogle } = require('./googleTTS.service');
+const { generateAndSaveAudioSarvam } = require('./sarvamTTS.service');
 
 /**
  * Calls ElevenLabs API to generate TTS audio and saves it as an MP3.
@@ -75,13 +66,14 @@ async function generateAndSaveAudioEleven(text, sceneName, voiceId = DEFAULT_VOI
 
         const elevenlabs = new ElevenLabsClient({ apiKey });
         const normalizedText = normalizeForTTS(text);
-        const voiceSettings = getVoiceSettings(MODE);
+        const voiceSettings = getVoiceSettings();
 
         const audioStream = await elevenlabs.textToSpeech.convert(voiceId, {
             text: normalizedText,
             modelId: MODEL_ID,
             outputFormat: 'mp3_44100_128',
-            voice_settings: voiceSettings
+            voice_settings: voiceSettings,
+            seed: 17,
         });
 
         // The SDK returns a web stream, so we convert it to a Node Readable stream buffer to write to disk
@@ -100,7 +92,7 @@ async function generateAndSaveAudioEleven(text, sceneName, voiceId = DEFAULT_VOI
         // Prepare file path
         const safeSceneName = sceneName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         const fileName = `${safeSceneName}_${Date.now()}.mp3`;
-        const filePath = path.join(tempAudioDir, fileName);
+        const filePath = path.join(audioDir(), fileName);
 
         // Save audio to disk
         fs.writeFileSync(filePath, audioBuffer);
@@ -133,11 +125,100 @@ async function generateAndSaveAudio(text, sceneName, provider = 'elevenlabs', op
     if (p === 'elevenlabs') {
         return await generateAndSaveAudioEleven(text, sceneName, options.voiceId);
     }
+    if (p === 'sarvam') {
+        return await generateAndSaveAudioSarvam(text, sceneName);
+    }
     throw new Error(`Unsupported TTS provider selected: ${provider}`);
+}
+
+/** Bump this to force a one-time rebuild of saved scene MP3s. */
+const AUDIO_RENDER_VERSION = 'v3-batch-lowtemp';
+
+function providerCharLimit(provider) {
+    const p = (provider || '').toLowerCase();
+    if (p === 'sarvam') return 2400;
+    if (p === 'google') return 4000;
+    return 4500;
+}
+
+function joinSceneNarration(texts) {
+    return texts
+        .map((text) => {
+            const normalized = flattenForEvenPace(text);
+            if (!normalized) return '';
+            if (/[।.!?]$/.test(normalized)) return normalized;
+            return `${normalized}।`;
+        })
+        .filter(Boolean)
+        .join(' ');
+}
+
+function groupScenesForLimit(scenes, limit) {
+    const groups = [];
+    let current = [];
+    let len = 0;
+    for (const scene of scenes) {
+        const piece = flattenForEvenPace(scene.text);
+        const extra = (current.length ? 1 : 0) + piece.length;
+        if (current.length && len + extra > limit) {
+            groups.push(current);
+            current = [scene];
+            len = piece.length;
+        } else {
+            current.push(scene);
+            len += extra;
+        }
+    }
+    if (current.length) groups.push(current);
+    return groups;
+}
+
+/**
+ * One TTS take for consecutive scenes, then split on silence near scene boundaries.
+ * That keeps speaker, pitch, and pace the same instead of a new random take per scene.
+ */
+async function generateConsistentSceneAudio(scenes, provider, projectId) {
+    const { splitAudioByTextWeights } = require('./audioSplit.service');
+    const groups = groupScenesForLimit(scenes, providerCharLimit(provider));
+    const clips = [];
+
+    for (let g = 0; g < groups.length; g++) {
+        const group = groups[g];
+        const texts = group.map((scene) => scene.text);
+        const joined = joinSceneNarration(texts);
+        const batchName = `${projectId}_narration_${g + 1}`;
+        const result = await generateAndSaveAudio(joined, batchName, provider);
+        if (result.error) {
+            return result;
+        }
+
+        let partPaths = [result.filePath];
+        if (group.length > 1) {
+            partPaths = await splitAudioByTextWeights(
+                result.filePath,
+                texts.map((t) => flattenForEvenPace(t)),
+                `${projectId}_g${g + 1}`
+            );
+        }
+
+        for (let i = 0; i < group.length; i++) {
+            const filePath = partPaths[i];
+            const duration = await getAudioDurationInSeconds(filePath);
+            clips.push({
+                sceneId: group[i].sceneId,
+                filePath,
+                duration,
+            });
+        }
+    }
+
+    return { clips, version: AUDIO_RENDER_VERSION };
 }
 
 module.exports = {
     generateAndSaveAudio,
+    generateConsistentSceneAudio,
+    AUDIO_RENDER_VERSION,
     normalizeForTTS,
     getVoiceSettings,
     MODE

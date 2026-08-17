@@ -1,12 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { frameImageForVideo, TARGET_WIDTH, TARGET_HEIGHT } = require('../utils/imageFraming');
-
-// Ensure temp directory exists
-const tempImagesDir = path.join(__dirname, '../temp/images');
-if (!fs.existsSync(tempImagesDir)) {
-    fs.mkdirSync(tempImagesDir, { recursive: true });
-}
+const { imagesDir } = require('../utils/tempDirs');
 
 // FLUX_MODEL: "flux2pro" (best HD), "pro1.1", "pro", "dev", "schnell". Use flux2pro for sharp, high-quality images.
 const FLUX_MODEL = (process.env.FLUX_MODEL || 'flux2pro').toLowerCase();
@@ -26,8 +21,8 @@ const { generateAndSaveSceneImageGoogle } = require('./googleImage.service');
 
 /**
  * Calls Flux API (dev/pro preferred) and saves the generated image as a PNG.
- * Guarantees 1920x1080 output (upscales with sharp if needed).
- * @param {string} prompt - The fully built visual prompt (no text, no numbers).
+ * Guarantees 1280x720 HD output.
+ * @param {string} prompt - Fully built visual prompt (locked character + 2D outline style + scene).
  * @param {string} sceneName - Unique identifier/name for the scene to use as the filename.
  * @param {{ negativePrompt?: string }} [options] - Optional negative prompt to avoid unwanted styles.
  * @returns {Promise<string>} - The local absolute path where the image was saved.
@@ -105,12 +100,12 @@ async function generateAndSaveSceneImageFal(prompt, sceneName, options = {}) {
         const safeSceneName = sceneName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         const timestamp = Date.now();
         const baseName = `${safeSceneName}_${timestamp}`;
-        const originalPath = path.join(tempImagesDir, `${baseName}_raw.png`);
-        const finalPath = path.join(tempImagesDir, `${baseName}.png`);
+        const originalPath = path.join(imagesDir(), `${baseName}_raw.png`);
+        const finalPath = path.join(imagesDir(), `${baseName}.png`);
 
         fs.writeFileSync(originalPath, buffer);
 
-        // Always output 1920x1080 without cropping; add consistent safe padding.
+        // Always output 1280x720.
         const fullHdBuffer = await frameImageForVideo(buffer);
         fs.writeFileSync(finalPath, fullHdBuffer);
         console.log(`Successfully saved scene image to ${finalPath} (${TARGET_WIDTH}x${TARGET_HEIGHT} padded no-crop frame)`);

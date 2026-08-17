@@ -45,14 +45,14 @@ const VISUAL_SCENE_TEMPLATES = {
     general_finance: 'person reviewing personal finances on laptop with charts'
 };
 
-/** Character action per concept for scene description (Jake = main explainer character). */
+/** Character action per concept for scene description (Arjun = locked explainer character). */
 const CONCEPT_CHARACTER_ACTIONS = {
-    credit_card_payment: 'Jake sitting at a desk paying his credit card bill online',
-    saving_money: 'Jake dropping coins into a piggy bank',
-    paying_bills: 'Jake sitting at laptop paying bills online',
-    investing: 'Jake analyzing financial growth beside an investment chart',
-    debt: 'Jake looking at a credit card bill with red balance warning',
-    general_finance: 'Jake reviewing personal finances on laptop with charts'
+    credit_card_payment: 'Arjun sitting at a desk paying his credit card bill online',
+    saving_money: 'Arjun dropping coins into a piggy bank',
+    paying_bills: 'Arjun sitting at laptop paying bills online',
+    investing: 'Arjun analyzing financial growth beside an investment chart',
+    debt: 'Arjun looking at a credit card bill with red balance warning',
+    general_finance: 'Arjun reviewing personal finances on laptop with charts'
 };
 
 /** Expression per concept for visual alignment. */

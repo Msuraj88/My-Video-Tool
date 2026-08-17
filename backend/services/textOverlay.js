@@ -1,20 +1,21 @@
 /**
  * Renders text overlays on scene images after generation using Canvas.
  * Text-to-image models cannot render text reliably; numbers and headlines are added here.
- * Output is always 1920x1080 PNG with strong, high-contrast explainer-style text.
+ * Output is always 1280x720 PNG.
  */
 
 const fs = require('fs');
 const path = require('path');
 const { createCanvas, loadImage } = require('canvas');
 const { formatNumber } = require('../utils/formatNumber');
+const { ensureDir } = require('../utils/tempDirs');
 
-const CANVAS_WIDTH = 1920;
-const CANVAS_HEIGHT = 1080;
+const CANVAS_WIDTH = 1280;
+const CANVAS_HEIGHT = 720;
 
-const TITLE_FONT_SIZE = 60;
-const NUMBER_FONT_SIZE = 120;
-const SUBTEXT_FONT_SIZE = 40;
+const TITLE_FONT_SIZE = 40;
+const NUMBER_FONT_SIZE = 80;
+const SUBTEXT_FONT_SIZE = 28;
 
 const PADDING_X = 100;
 const MAX_TEXT_WIDTH = CANVAS_WIDTH - 200;
@@ -115,8 +116,8 @@ function drawHighlightCards(ctx, highlights) {
 
     const cards = highlights.slice(0, 2);
     const positions = [
-        { x: 90, y: 760, align: 'left' },
-        { x: CANVAS_WIDTH - 90, y: 860, align: 'right' }
+        { x: 60, y: 500, align: 'left' },
+        { x: CANVAS_WIDTH - 60, y: 580, align: 'right' }
     ];
 
     cards.forEach((highlight, index) => {
@@ -173,6 +174,7 @@ async function overlaySceneText(imagePath, sceneData) {
     const base = path.basename(imagePath, ext);
 
     const outputPath = path.join(dir, `${base}_overlay${ext}`);
+    ensureDir(dir);
 
     const baseImage = await loadImage(imagePath);
 

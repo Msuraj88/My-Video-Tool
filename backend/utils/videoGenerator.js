@@ -3,37 +3,51 @@ const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 const path = require('path');
 const fs = require('fs');
 const { getAudioDurationInSeconds } = require('get-audio-duration');
+const { videosDir } = require('./tempDirs');
+const { TARGET_WIDTH, TARGET_HEIGHT } = require('./imageFraming');
 
-// Set the path to the ffmpeg binary provided by @ffmpeg-installer
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
-// Ensure temp video directory exists
-const tempVideoDir = path.join(__dirname, '../temp/videos');
-if (!fs.existsSync(tempVideoDir)) {
-    fs.mkdirSync(tempVideoDir, { recursive: true });
-}
-
-// Cinematic timing: buffer (seconds) after audio ends before video ends
-const POST_AUDIO_BUFFER_SECONDS = 0.6;
-// Short fades at scene boundaries to prevent click/pop when concatenating
+const POST_AUDIO_BUFFER_SECONDS = 0.25;
 const AUDIO_FADE_DURATION = 0.03;
+/** Match zoompan's default output rate (this FFmpeg build is from 2018). */
+const VIDEO_FPS = 25;
+/** Very slight Ken Burns zoom (4%). */
+const ZOOM_AMOUNT = 0.04;
+const ZOOM_SOURCE_WIDTH = TARGET_WIDTH * 4;
+const ZOOM_SOURCE_HEIGHT = TARGET_HEIGHT * 4;
 
 /**
- * Merges a single image and an audio file into a video.
- * Video duration = audio duration + POST_AUDIO_BUFFER_SECONDS for cinematic hold.
- *
- * @param {string} imagePath - Absolute path to the PNG/JPG image file.
- * @param {string} audioPath - Absolute path to the MP3/WAV audio file.
- * @param {string} sceneName - Unique identifier for the scene.
- * @returns {Promise<string>} - A promise that resolves to the path of the generated video.
+ * Ken Burns zoom for FFmpeg 2018: zoompan cannot take fps=, and scale cannot use t=.
+ * Upscale first so each zoom step is a tiny fraction of a pixel, then trunc() the crop.
  */
-function createSceneVideo(imagePath, audioPath, sceneName) {
+function buildKenBurnsFilter(direction, durationSec) {
+    const frames = Math.max(Math.round(durationSec * VIDEO_FPS), VIDEO_FPS);
+    const last = Math.max(frames - 1, 1);
+    const zoomExpr = direction === 'in'
+        ? `1+${ZOOM_AMOUNT}*on/${last}`
+        : `1+${ZOOM_AMOUNT}*(1-on/${last})`;
+
+    return [
+        `scale=${ZOOM_SOURCE_WIDTH}:${ZOOM_SOURCE_HEIGHT}`,
+        `zoompan=z='${zoomExpr}':x='trunc(iw/2-(iw/zoom/2))':y='trunc(ih/2-(ih/zoom/2))':d=${frames}:s=${TARGET_WIDTH}x${TARGET_HEIGHT}`,
+        'format=yuv420p',
+    ];
+}
+
+/**
+ * Merges a still image and audio into a scene clip with a slight zoom.
+ * Even scenes (1, 3, …) zoom out; odd scenes (2, 4, …) zoom in.
+ */
+function createSceneVideo(imagePath, audioPath, sceneName, options = {}) {
     return new Promise(async (resolve, reject) => {
         try {
             const safeSceneName = sceneName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-            const outputPath = path.join(tempVideoDir, `${safeSceneName}_${Date.now()}.mp4`);
+            const outputPath = path.join(videosDir(), `${safeSceneName}_${Date.now()}.mp4`);
+            const sceneIndex = Number.isFinite(options.sceneIndex) ? options.sceneIndex : 0;
+            const direction = sceneIndex % 2 === 0 ? 'out' : 'in';
 
-            console.log(`Starting video generation for scene: ${sceneName}`);
+            console.log(`Starting video generation for scene: ${sceneName} (zoom ${direction})`);
 
             let audioDurationSec = 0;
             try {
@@ -44,29 +58,24 @@ function createSceneVideo(imagePath, audioPath, sceneName) {
             }
 
             const videoDurationSec = audioDurationSec + POST_AUDIO_BUFFER_SECONDS;
-
-            // Fade in/out at boundaries to prevent click when concatenating scenes
             const fadeOutStart = Math.max(0, videoDurationSec - AUDIO_FADE_DURATION);
             const afilter = `afade=t=in:st=0:d=${AUDIO_FADE_DURATION},afade=t=out:st=${fadeOutStart}:d=${AUDIO_FADE_DURATION}`;
+            const vfilter = buildKenBurnsFilter(direction, videoDurationSec);
 
-            // Build video: duration = audio + buffer (image holds for 0.6s after audio ends)
             ffmpeg()
-                // Input 1: The still image
                 .input(imagePath)
-                .inputOptions(['-loop 1']) // Loop still image
-
-                // Input 2: The audio track
                 .input(audioPath)
-
-                // Output options: explicit duration, short fades to avoid tick/click at scene changes
+                .videoFilters(vfilter)
                 .outputOptions([
-                    '-c:v libx264',       // Use H.264 video codec
-                    '-tune stillimage',   // Optimize for still image
-                    '-c:a aac',           // Use AAC audio codec
-                    '-b:a 192k',          // Audio bitrate
-                    '-af', afilter,       // Fade in/out to prevent concatenation clicks
-                    '-pix_fmt yuv420p',   // Pixel format for compatibility
-                    '-t', String(videoDurationSec)  // Video length = audio + 0.6s buffer
+                    '-c:v libx264',
+                    '-preset medium',
+                    '-crf', '18',
+                    '-c:a aac',
+                    '-b:a 192k',
+                    '-af', afilter,
+                    '-pix_fmt yuv420p',
+                    '-r', String(VIDEO_FPS),
+                    '-t', String(videoDurationSec),
                 ])
                 .save(outputPath)
                 .on('end', () => {
@@ -98,10 +107,11 @@ function concatenateVideos(videoPaths, outputPath) {
             return reject(new Error('No video paths provided for concatenation.'));
         }
 
-        const finalOutputPath = outputPath || path.join(tempVideoDir, `final_${Date.now()}.mp4`);
+        const dir = videosDir();
+        const finalOutputPath = outputPath || path.join(dir, `final_${Date.now()}.mp4`);
+        fs.mkdirSync(path.dirname(finalOutputPath), { recursive: true });
 
-        // Ensure temp directory exists for the list file
-        const listFilePath = path.join(tempVideoDir, `concat_list_${Date.now()}.txt`);
+        const listFilePath = path.join(dir, `concat_list_${Date.now()}.txt`);
 
         // Write the list of files in the format required by FFmpeg concat demuxer
         const fileContent = videoPaths

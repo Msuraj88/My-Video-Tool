@@ -2,11 +2,25 @@ function getWordCount(text) {
     return text.trim().split(/\s+/).filter(w => w.length > 0).length;
 }
 
+function splitIntoSentences(scriptText) {
+    const text = String(scriptText || '').trim();
+    if (!text) return [];
+
+    if (!/[।.!?]/.test(text)) {
+        const lines = text.split(/\n+/).map((s) => s.trim()).filter(Boolean);
+        return lines.length ? lines : [text];
+    }
+
+    // English .!? plus Hindi danda ।. Keep a trailing fragment that has no terminator.
+    const matches = text.match(/[^।.!?]+[।.!?]+|[^।.!?]+$/g);
+    if (!matches) return [text];
+    return matches.map((s) => s.trim()).filter(Boolean);
+}
+
 function processScript(scriptText) {
     if (!scriptText || typeof scriptText !== 'string') return [];
 
-    // 1. Proper sentence detection
-    const sentences = scriptText.match(/[^.!?]+[.!?]+/g) || [];
+    const sentences = splitIntoSentences(scriptText);
 
     const scenes = [];
     let currentScene = "";

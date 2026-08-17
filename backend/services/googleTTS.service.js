@@ -6,20 +6,20 @@ const fs = require('fs');
 const path = require('path');
 const { getAudioDurationInSeconds } = require('get-audio-duration');
 const { getKeyPath, getGoogleAccessToken } = require('../utils/googleAuth');
+const { audioDir } = require('../utils/tempDirs');
+const { TTS_PACE, flattenForEvenPace } = require('../config/ttsPace');
 
 const fetchTts = typeof globalThis.fetch !== 'undefined' ? globalThis.fetch : require('node-fetch');
-
-const tempAudioDir = path.join(__dirname, '../temp/audio');
-if (!fs.existsSync(tempAudioDir)) {
-    fs.mkdirSync(tempAudioDir, { recursive: true });
-}
 
 const MAX_INPUT_BYTES = 4500;
 
 const AUDIO_ENCODING = process.env.GOOGLE_TTS_ENCODING || 'MP3';
-const SPEAKING_RATE = parseFloat(process.env.GOOGLE_TTS_SPEED || '0.97');
+const SPEAKING_RATE = parseFloat(process.env.GOOGLE_TTS_SPEED || String(TTS_PACE.googleSpeakingRate));
 const VOLUME_GAIN_DB = parseFloat(process.env.GOOGLE_TTS_VOLUME_GAIN || '0');
 const PITCH_SEMITONES = parseFloat(process.env.GOOGLE_TTS_PITCH || '-1');
+const TTS_LANGUAGE_CODE = process.env.GOOGLE_TTS_LANGUAGE_CODE || 'en-US';
+const SSML_RATE = process.env.GOOGLE_TTS_SSML_RATE || String(TTS_PACE.googleSpeakingRate);
+const SSML_PITCH_ST = process.env.GOOGLE_TTS_SSML_PITCH_ST || '-1';
 
 // Chirp 3: HD voices (realistic, emotional) – Algenib = male, deep baritone
 const CHIRP3_HD_ALGENIB = 'en-US-Chirp3-HD-Algenib';
@@ -47,20 +47,25 @@ function isStudioVoice(voiceName) {
     return typeof voiceName === 'string' && /-Studio-/i.test(voiceName);
 }
 
-function normalizeTextForGoogleTTS(text) {
-    if (text == null || typeof text !== 'string') return '';
-    return text
-        .trim()
-        .replace(/\s+/g, ' ')
-        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+function isChirp3Voice(voiceName) {
+    return typeof voiceName === 'string' && /Chirp3/i.test(voiceName);
 }
 
-const MAX_SSML_BYTES = 4800; // Keep under Google's 5000-byte request limit
+/** Chirp3 and Studio voices reject pitch parameters. */
+function supportsPitch(voiceName) {
+    return !isStudioVoice(voiceName) && !isChirp3Voice(voiceName);
+}
 
-// Pause durations (ms). Set to 0 to disable. Sentence = after .!?; clause = after — or :; comma = after ,
-const PAUSE_SENTENCE_MS = Math.max(0, parseInt(process.env.GOOGLE_TTS_PAUSE_SENTENCE_MS, 10) || 500);
-const PAUSE_CLAUSE_MS = Math.max(0, parseInt(process.env.GOOGLE_TTS_PAUSE_CLAUSE_MS, 10) || 300);
-const PAUSE_COMMA_MS = Math.max(0, parseInt(process.env.GOOGLE_TTS_PAUSE_COMMA_MS, 10) || 200);
+function normalizeTextForGoogleTTS(text) {
+    return flattenForEvenPace(text);
+}
+
+const MAX_SSML_BYTES = 4800;
+
+// Extra SSML breaks make comma-heavy scenes feel slower. Keep them off.
+const PAUSE_SENTENCE_MS = Math.max(0, parseInt(process.env.GOOGLE_TTS_PAUSE_SENTENCE_MS, 10) || 0);
+const PAUSE_CLAUSE_MS = Math.max(0, parseInt(process.env.GOOGLE_TTS_PAUSE_CLAUSE_MS, 10) || 0);
+const PAUSE_COMMA_MS = Math.max(0, parseInt(process.env.GOOGLE_TTS_PAUSE_COMMA_MS, 10) || 0);
 
 function truncateToByteLength(str, maxBytes) {
     const buf = Buffer.from(str, 'utf8');
@@ -80,7 +85,7 @@ function escapeSsml(text) {
 
 /**
  * Build SSML: escape, truncate, minimal prosody, proper pauses at sentence/clause/comma.
- * Chirp 3 HD supports prosody; Studio voices get rate only (no pitch in SSML).
+ * Chirp 3 / Studio voices: rate only (no pitch).
  */
 function buildSsmlForPaceAndPause(text, voiceName) {
     let t = escapeSsml(text.trim());
@@ -103,10 +108,10 @@ function buildSsmlForPaceAndPause(text, voiceName) {
         t = t.replace(/(,)\s+/g, `$1 <break time="${PAUSE_COMMA_MS}ms"/> `);
     }
 
-    if (isStudioVoice(voiceName)) {
-        return `<speak><prosody rate="0.97">${t}</prosody></speak>`;
+    if (!supportsPitch(voiceName)) {
+        return `<speak><prosody rate="${SSML_RATE}">${t}</prosody></speak>`;
     }
-    return `<speak><prosody rate="0.97" pitch="-1st">${t}</prosody></speak>`;
+    return `<speak><prosody rate="${SSML_RATE}" pitch="${SSML_PITCH_ST}st">${t}</prosody></speak>`;
 }
 
 function getAudioConfig(voiceName) {
@@ -114,10 +119,9 @@ function getAudioConfig(voiceName) {
         audioEncoding: AUDIO_ENCODING,
         speakingRate: SPEAKING_RATE,
         volumeGainDb: VOLUME_GAIN_DB,
-        pitch: PITCH_SEMITONES,
     };
-    if (isStudioVoice(voiceName)) {
-        delete config.pitch;
+    if (supportsPitch(voiceName)) {
+        config.pitch = PITCH_SEMITONES;
     }
     return config;
 }
@@ -126,7 +130,7 @@ function saveAudioFromResponse(audioContentBase64, sceneName) {
     const audioBuffer = Buffer.from(audioContentBase64, 'base64');
     const safeSceneName = sceneName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
     const fileName = `${safeSceneName}_google_${Date.now()}.mp3`;
-    const filePath = path.join(tempAudioDir, fileName);
+    const filePath = path.join(audioDir(), fileName);
     fs.writeFileSync(filePath, audioBuffer);
     return filePath;
 }
@@ -134,7 +138,6 @@ function saveAudioFromResponse(audioContentBase64, sceneName) {
 async function synthesizeWithServiceAccountREST(inputText, sceneName) {
     const accessToken = await getGoogleAccessToken();
     const voiceName = getVoiceName();
-    const ssml = buildSsmlForPaceAndPause(inputText, voiceName);
     const url = 'https://texttospeech.googleapis.com/v1/text:synthesize';
     const response = await fetchTts(url, {
         method: 'POST',
@@ -143,8 +146,8 @@ async function synthesizeWithServiceAccountREST(inputText, sceneName) {
             'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
-            input: { ssml },
-            voice: { languageCode: 'en-US', name: voiceName },
+            input: { text: inputText },
+            voice: { languageCode: TTS_LANGUAGE_CODE, name: voiceName },
             audioConfig: getAudioConfig(voiceName),
         }),
     });

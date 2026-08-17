@@ -1,16 +1,10 @@
 const sharp = require('sharp');
 
-const TARGET_WIDTH = 1920;
-const TARGET_HEIGHT = 1080;
+const TARGET_WIDTH = 1280;
+const TARGET_HEIGHT = 720;
 
 /**
- * Outputs exactly 1920x1080 for video. Fills the full frame (no patch/letterboxing).
- * - If the image is already 16:9, resizes to exact 1920x1080.
- * - If the image is square or other ratio, uses "cover" so the frame is filled
- *   (cropping to 16:9) so the scene never appears as a small patch in the center.
- *
- * @param {Buffer} buffer
- * @returns {Promise<Buffer>}
+ * Outputs exactly 1280x720 (HD 16:9) for video.
  */
 async function frameImageForVideo(buffer) {
     return sharp(buffer)

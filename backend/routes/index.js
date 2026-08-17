@@ -12,7 +12,17 @@ router.get('/hello', (req, res) => {
     res.json(data);
 });
 
-// Video Generation Endpoint
+// Staged script-to-video workflow
+router.post('/projects', videoController.splitScript);
+router.get('/projects/:projectId', videoController.getProject);
+router.put('/projects/:projectId/scenes', videoController.updateScenes);
+router.post('/projects/:projectId/generate-images', videoController.generateAllImages);
+router.post('/projects/:projectId/scenes/:sceneId/generate-image', videoController.generateSceneImage);
+router.post('/projects/:projectId/generate-video', videoController.assembleVideo);
+router.get('/projects/:projectId/images/:fileName', videoController.serveImage);
+router.get('/projects/:projectId/video', videoController.serveVideo);
+
+// Legacy one-shot video generation
 router.post('/generate-video', videoController.generateVideo);
 
 module.exports = router;

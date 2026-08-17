@@ -8,20 +8,16 @@ const fs = require('fs');
 const path = require('path');
 const { getKeyPath, getGoogleAccessToken } = require('../utils/googleAuth');
 const { frameImageForVideo, TARGET_WIDTH, TARGET_HEIGHT } = require('../utils/imageFraming');
+const { imagesDir } = require('../utils/tempDirs');
 
 const fetchFn = typeof globalThis.fetch !== 'undefined' ? globalThis.fetch : require('node-fetch');
-
-const tempImagesDir = path.join(__dirname, '../temp/images');
-if (!fs.existsSync(tempImagesDir)) {
-    fs.mkdirSync(tempImagesDir, { recursive: true });
-}
 
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
 const LOCATION = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
 const STANDARD_MODEL_ID = 'imagen-3.0-generate-001';
 const FAST_MODEL_ID = 'imagen-3.0-fast-generate-001';
 
-const DEFAULT_NEGATIVE_PROMPT = `photorealistic, 3D render, realistic photo, gradients, complex shading, plain background, two people, duplicate character, text on image, watermark, distorted face`;
+const DEFAULT_NEGATIVE_PROMPT = `photorealistic, 3D render, realistic photo, complex gradients, two people, duplicate character, different character, brown hair, beard, white collared shirt, watermark, distorted face`;
 
 function getModelId() {
     return (process.env.IMAGEN_QUALITY || 'standard').toLowerCase() === 'fast'
@@ -56,7 +52,7 @@ function buildVertexPayload(prompt, negativePrompt) {
  * @param {string} prompt - Full image prompt from our pipeline.
  * @param {string} sceneName - Scene id for filenames.
  * @param {{ negativePrompt?: string }} [options]
- * @returns {Promise<string>} - Path to saved 1920x1080 PNG.
+ * @returns {Promise<string>} - Path to saved 1280x720 PNG.
  */
 async function generateAndSaveSceneImageGoogle(prompt, sceneName, options = {}) {
     if (!PROJECT_ID) {
@@ -109,7 +105,7 @@ async function generateAndSaveSceneImageGoogle(prompt, sceneName, options = {}) 
         const buffer = Buffer.from(bytesBase64, 'base64');
         const safeSceneName = sceneName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         const baseName = `${safeSceneName}_google_${Date.now()}`;
-        const finalPath = path.join(tempImagesDir, `${baseName}.png`);
+        const finalPath = path.join(imagesDir(), `${baseName}.png`);
 
         const framedBuffer = await frameImageForVideo(buffer);
         fs.writeFileSync(finalPath, framedBuffer);

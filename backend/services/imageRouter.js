@@ -11,7 +11,7 @@ const { generateAndSaveSceneImage } = require('./imageGeneration.service');
  * @param {string} provider - "google" | "flux" | "fal"
  * @param {string} sceneName - Scene identifier for filenames
  * @param {{ negativePrompt?: string }} [options] - Optional (e.g. negativePrompt)
- * @returns {Promise<string>} Path to saved image (1920x1080 PNG)
+ * @returns {Promise<string>} Path to saved image (1280x720 PNG)
  */
 async function generateImage(prompt, provider, sceneName, options = {}) {
     const p = (provider || '').toLowerCase();

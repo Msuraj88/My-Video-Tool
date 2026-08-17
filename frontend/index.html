@@ -14,18 +14,38 @@
             --border-color: #30363d;
             --input-bg: #010409;
             --success-color: #238636;
+            --muted: #8b949e;
+            --placeholder: #1c2333;
+            --preview: #d9d9d9;
         }
+
+        * { box-sizing: border-box; }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-color);
-            line-height: 1.6;
+            line-height: 1.5;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        button {
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
+        }
+
+        /* —— Script page —— */
+        .script-page {
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            margin: 0;
             padding: 20px;
         }
 
@@ -36,234 +56,578 @@
             padding: 32px;
             width: 100%;
             max-width: 600px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
         }
 
-        h1 {
-            margin-top: 0;
-            font-size: 24px;
-            text-align: center;
-            margin-bottom: 24px;
-        }
+        h1 { margin: 0 0 24px; font-size: 24px; text-align: center; }
 
-        .input-group {
-            margin-bottom: 20px;
-        }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; }
 
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-        }
-
-        textarea {
+        textarea, select {
             width: 100%;
-            height: 150px;
             padding: 12px;
             background-color: var(--input-bg);
             border: 1px solid var(--border-color);
             border-radius: 6px;
             color: var(--text-color);
             font-family: inherit;
-            resize: vertical;
-            box-sizing: border-box;
         }
 
-        textarea:focus {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(47, 129, 247, 0.3);
-        }
+        #scriptInput { height: 150px; resize: vertical; }
 
-        button {
+        .primary-btn {
             width: 100%;
             padding: 12px;
-            background-color: var(--accent-color);
-            color: white;
+            background: var(--accent-color);
+            color: #fff;
             border: none;
             border-radius: 6px;
             font-size: 16px;
             font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.2s;
         }
+        .primary-btn:hover:not(:disabled) { background: var(--accent-hover); }
 
-        button:hover {
-            background-color: var(--accent-hover);
-        }
-
-        button:disabled {
-            background-color: var(--border-color);
-            cursor: not-allowed;
-            color: #8b949e;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            margin-top: 20px;
-            color: #8b949e;
-        }
-
+        .loading { display: none; text-align: center; margin-top: 20px; color: var(--muted); }
         .spinner {
             display: inline-block;
-            width: 20px;
-            height: 20px;
+            width: 18px; height: 18px;
             border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
             border-top-color: var(--accent-color);
-            animation: spin 1s ease-in-out infinite;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
             margin-right: 8px;
             vertical-align: middle;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        .error-text { color: #ff7b72; margin-top: 12px; font-size: 14px; }
 
-        #resultArea {
-            margin-top: 24px;
-            padding: 16px;
-            border-radius: 6px;
+        /* —— Editor page (mockup) —— */
+        .editor-page {
             display: none;
+            padding: 28px 36px 40px;
+            max-width: 1280px;
+            margin: 0 auto;
         }
 
-        .result-success {
-            background-color: rgba(35, 134, 54, 0.1);
-            border: 1px solid rgba(35, 134, 54, 0.4);
+        .project-title {
+            font-size: 42px;
+            font-weight: 700;
+            margin: 0 0 28px;
+            letter-spacing: -0.03em;
         }
 
-        .result-error {
-            background-color: rgba(248, 81, 73, 0.1);
-            border: 1px solid rgba(248, 81, 73, 0.4);
-            color: #ff7b72;
+        .editor-grid {
+            display: grid;
+            grid-template-columns: 1.15fr 0.85fr;
+            gap: 48px;
+            align-items: start;
         }
 
-        .download-btn {
-            display: inline-block;
-            background-color: var(--success-color);
-            color: white;
+        .scenes-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+
+        .scenes-head h2 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 700;
+            text-transform: lowercase;
+        }
+
+        .ghost-btn {
+            background: #e8e8e8;
+            color: #111;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .scenes-panel {
+            background: #1a1f27;
+            border-radius: 16px;
+            padding: 18px 16px;
+            max-height: calc(100vh - 180px);
+            overflow-y: auto;
+        }
+
+        .scene-row {
+            margin-bottom: 18px;
+        }
+
+        .scene-row:last-child { margin-bottom: 0; }
+
+        .scene-label {
+            font-size: 13px;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .scene-body {
+            display: grid;
+            grid-template-columns: 1fr 88px;
+            gap: 10px;
+            align-items: stretch;
+        }
+
+        .scene-text {
+            min-height: 88px;
+            height: 88px;
+            padding: 10px 12px;
+            background: #11151c;
+            border: 1px solid #2a313c;
+            border-radius: 8px;
+            color: var(--text-color);
+            font-size: 13px;
+            resize: vertical;
+        }
+
+        .scene-thumb {
+            width: 88px;
+            height: 88px;
+            border-radius: 8px;
+            background: var(--placeholder);
+            border: none;
+            padding: 0;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .scene-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .scene-thumb .ph-icon {
+            width: 28px;
+            height: 28px;
+            opacity: 0.55;
+        }
+
+        .scene-thumb .thumb-hint {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 600;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 6px;
+            line-height: 1.2;
+        }
+
+        .scene-thumb:hover .thumb-hint { display: flex; }
+
+        .scene-thumb.busy::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+        }
+
+        .scene-thumb.busy .thumb-hint { display: none; }
+
+        .preview-col {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding-top: 42px;
+        }
+
+        .preview-box {
+            background: var(--preview);
+            border-radius: 16px;
+            min-height: 280px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .preview-box video {
+            width: 100%;
+            display: block;
+            background: #000;
+        }
+
+        .preview-empty {
+            color: #555;
+            font-size: 14px;
+        }
+
+        .generate-video-btn {
+            width: 100%;
+            background: #e8e8e8;
+            color: #111;
+            border: none;
+            border-radius: 10px;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .download-link {
+            display: none;
+            text-align: center;
+            color: var(--accent-color);
+            font-weight: 600;
             text-decoration: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            font-weight: 500;
-            margin-top: 12px;
-            transition: opacity 0.2s;
         }
 
-        .download-btn:hover {
-            opacity: 0.9;
+        .status-line {
+            font-size: 13px;
+            color: var(--muted);
+            min-height: 18px;
+        }
+
+        .back-link {
+            background: none;
+            border: none;
+            color: var(--accent-color);
+            padding: 0;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        @media (max-width: 900px) {
+            .editor-grid { grid-template-columns: 1fr; }
+            .preview-col { padding-top: 0; }
         }
     </style>
 </head>
 <body>
-
-    <div class="container">
-        <h1>AI Explainer Video Generator</h1>
-        
-        <div class="input-group">
-            <label for="scriptInput">Video Script</label>
-            <textarea id="scriptInput" placeholder="Enter your video script here... We'll automatically break it down into scenes, generate audio, create images of your explainer character, and stitch it all together!"></textarea>
-        </div>
-
-        <div style="display: flex; gap: 16px; margin-bottom: 24px;">
-            <div class="input-group" style="flex: 1; margin-bottom: 0;">
-                <label for="ttsProvider">TTS Provider</label>
-                <select id="ttsProvider" style="width: 100%; padding: 10px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-color);">
-                    <option value="elevenlabs">ElevenLabs</option>
-                    <option value="google">Google Cloud TTS</option>
-                </select>
+    <div class="script-page" id="scriptPage">
+        <div class="container">
+            <h1>AI Explainer Video Generator</h1>
+            <div class="input-group">
+                <label for="scriptInput">Video Script</label>
+                <textarea id="scriptInput" placeholder="Enter your video script here..."></textarea>
             </div>
-            <div class="input-group" style="flex: 1; margin-bottom: 0;">
-                <label for="imageProvider">Image Provider</label>
-                <select id="imageProvider" style="width: 100%; padding: 10px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-color);">
-                    <option value="fal">Fal (Flux)</option>
-                    <option value="google">Google (Imagen)</option>
-                </select>
+            <div style="display:flex; gap:16px; margin-bottom:24px;">
+                <div class="input-group" style="flex:1; margin-bottom:0;">
+                    <label for="ttsProvider">TTS Provider</label>
+                    <select id="ttsProvider">
+                        <option value="elevenlabs">ElevenLabs</option>
+                        <option value="google">Google Cloud TTS</option>
+                        <option value="sarvam">Sarvam AI (Shubh)</option>
+                    </select>
+                </div>
+                <div class="input-group" style="flex:1; margin-bottom:0;">
+                    <label for="imageProvider">Image Provider</label>
+                    <select id="imageProvider">
+                        <option value="fal">Fal (Flux)</option>
+                        <option value="google">Google (Imagen)</option>
+                    </select>
+                </div>
             </div>
+            <button class="primary-btn" id="splitBtn" onclick="splitScript()">Generate</button>
+            <div id="splitLoading" class="loading">
+                <span class="spinner"></span>
+                <span>Understanding the full script and breaking it into scenes...</span>
+            </div>
+            <div id="splitError" class="error-text"></div>
         </div>
+    </div>
 
-        <button id="generateBtn" onclick="generateVideo()">Generate Video</button>
-
-        <div id="loadingIndicator" class="loading">
-            <div class="spinner"></div>
-            <span>Generating your video pipeline... This may take a few minutes depending on script length.</span>
-        </div>
-
-        <div id="resultArea">
-            <h3 id="resultTitle" style="margin-top:0">Result</h3>
-            <p id="resultMessage"></p>
-            <div id="downloadAction"></div>
+    <div class="editor-page" id="editorPage">
+        <button class="back-link" onclick="goBack()">← New script</button>
+        <h1 class="project-title" id="projectTitle">Project Name</h1>
+        <div class="editor-grid">
+            <section>
+                <div class="scenes-head">
+                    <h2>scenes</h2>
+                    <button class="ghost-btn" id="generateScenesBtn" onclick="generateAllImages()">generate scenes</button>
+                </div>
+                <div class="scenes-panel" id="scenesList"></div>
+            </section>
+            <section class="preview-col">
+                <div class="preview-box" id="previewBox">
+                    <span class="preview-empty">Video preview</span>
+                </div>
+                <button class="generate-video-btn" id="generateVideoBtn" onclick="generateVideo()" disabled>Generate video</button>
+                <a class="download-link" id="downloadLink" href="#" download>Download video</a>
+                <div class="status-line" id="editorStatus"></div>
+            </section>
         </div>
     </div>
 
     <script>
-        async function generateVideo() {
-            const scriptText = document.getElementById('scriptInput').value.trim();
-            const ttsProvider = document.getElementById('ttsProvider').value;
-            const imageProvider = document.getElementById('imageProvider').value;
-            const btn = document.getElementById('generateBtn');
-            const loading = document.getElementById('loadingIndicator');
-            const resultArea = document.getElementById('resultArea');
-            
-            if (!scriptText) {
-                alert("Please enter a script first.");
+        const API = 'http://localhost:8000';
+        let project = null;
+        let generatingAll = false;
+        let generatingSceneId = null;
+
+        const placeholderSvg = `<svg class="ph-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="5" width="18" height="14" rx="2" stroke="#8aa0c8" stroke-width="1.6"/>
+            <path d="M3 16l5.5-5.5 4 4L16 12l5 4" stroke="#8aa0c8" stroke-width="1.6" fill="none"/>
+            <circle cx="8.2" cy="9" r="1.3" fill="#8aa0c8"/>
+        </svg>`;
+
+        function escapeHtml(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function imageSrc(url) {
+            if (!url) return '';
+            return url.startsWith('http') ? url : `${API}${url}`;
+        }
+
+        function setStatus(text, isError) {
+            const el = document.getElementById('editorStatus');
+            el.textContent = text || '';
+            el.style.color = isError ? '#ff7b72' : 'var(--muted)';
+        }
+
+        function allImagesReady() {
+            return project?.scenes?.length > 0 && project.scenes.every((s) => s.imageUrl);
+        }
+
+        function scenesDirty() {
+            if (!project) return false;
+            return collectSceneEdits().some((edit) => {
+                const orig = project.scenes.find((s) => s.sceneId === edit.sceneId);
+                return orig && orig.text.trim() !== String(edit.text || '').trim();
+            });
+        }
+
+        function updateVideoButton() {
+            const btn = document.getElementById('generateVideoBtn');
+            const ready = allImagesReady() && !generatingAll && !generatingSceneId && !scenesDirty();
+            btn.disabled = !ready;
+            btn.textContent = project?.videoUrl ? 'Regenerate' : 'Generate video';
+        }
+
+        function renderScenes() {
+            const wrap = document.getElementById('scenesList');
+            wrap.innerHTML = '';
+            (project.scenes || []).forEach((scene, index) => {
+                const row = document.createElement('div');
+                row.className = 'scene-row';
+                const hint = scene.imageUrl ? 'Regenerate image' : 'Generate this image';
+                row.innerHTML = `
+                    <div class="scene-label">scene ${index + 1}</div>
+                    <div class="scene-body">
+                        <textarea class="scene-text" data-scene-id="${escapeHtml(scene.sceneId)}">${escapeHtml(scene.text || '')}</textarea>
+                        <button type="button" class="scene-thumb" data-scene-id="${escapeHtml(scene.sceneId)}" title="${hint}">
+                            <span class="thumb-hint">${hint}</span>
+                        </button>
+                    </div>
+                `;
+                const thumb = row.querySelector('.scene-thumb');
+                const textarea = row.querySelector('.scene-text');
+                if (scene.imageUrl) {
+                    const img = document.createElement('img');
+                    img.src = `${imageSrc(scene.imageUrl)}?t=${Date.now()}`;
+                    img.alt = scene.sceneId;
+                    thumb.insertBefore(img, thumb.firstChild);
+                } else {
+                    thumb.insertAdjacentHTML('afterbegin', placeholderSvg);
+                }
+                if (generatingSceneId === scene.sceneId) thumb.classList.add('busy');
+                textarea.addEventListener('input', updateVideoButton);
+                thumb.addEventListener('click', () => generateOneImage(scene.sceneId));
+                wrap.appendChild(row);
+            });
+            updateVideoButton();
+        }
+
+        function collectSceneEdits() {
+            return [...document.querySelectorAll('.scene-text')].map((el) => ({
+                sceneId: el.dataset.sceneId,
+                text: el.value,
+            }));
+        }
+
+        async function saveEdits() {
+            if (!project) return;
+            const res = await fetch(`${API}/api/projects/${encodeURIComponent(project.projectId)}/scenes`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scenes: collectSceneEdits() }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.details || data.error || 'Failed to save scenes');
+            project = data;
+        }
+
+        function showEditor() {
+            document.getElementById('scriptPage').style.display = 'none';
+            document.getElementById('editorPage').style.display = 'block';
+            document.getElementById('projectTitle').textContent = project.name || 'Project Name';
+            document.getElementById('downloadLink').style.display = 'none';
+            document.getElementById('previewBox').innerHTML = '<span class="preview-empty">Video preview</span>';
+            renderScenes();
+        }
+
+        function goBack() {
+            project = null;
+            document.getElementById('editorPage').style.display = 'none';
+            document.getElementById('scriptPage').style.display = 'flex';
+        }
+
+        async function splitScript() {
+            const script = document.getElementById('scriptInput').value.trim();
+            const err = document.getElementById('splitError');
+            err.textContent = '';
+            if (!script) {
+                err.textContent = 'Please enter a script first.';
                 return;
             }
 
-            // UI State: Loading
+            const btn = document.getElementById('splitBtn');
+            const loading = document.getElementById('splitLoading');
             btn.disabled = true;
             loading.style.display = 'block';
-            resultArea.style.display = 'none';
 
             try {
-                // Adjust port to match your backend if needed
-                const response = await fetch('http://localhost:3000/api/generate-video', {
+                const res = await fetch(`${API}/api/projects`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ 
-                        script: scriptText,
-                        ttsProvider: ttsProvider,
-                        imageProvider: imageProvider
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        script,
+                        name: 'Project Name',
+                        ttsProvider: document.getElementById('ttsProvider').value,
+                        imageProvider: document.getElementById('imageProvider').value,
+                    }),
                 });
-
-                const data = await response.json();
-
-                // UI State: Complete
-                loading.style.display = 'none';
-                resultArea.style.display = 'block';
-
-                if (response.ok) {
-                    resultArea.className = 'result-success';
-                    document.getElementById('resultTitle').innerText = 'Success!';
-                    document.getElementById('resultMessage').innerText = `Processed ${data.scenes_processed} scenes successfully.`;
-                    
-                    // Note: Because the backend returns an absolute file path, downloading via browser 
-                    // requires the backend to serve that folder statically or provide a download token.
-                    // For local development, we'll display the path so the user can easily find it.
-                    document.getElementById('downloadAction').innerHTML = `
-                        <p style="font-size: 14px; margin-bottom: 4px;">Video saved locally at:</p>
-                        <code style="background:var(--input-bg); padding:4px 8px; border-radius:4px; display:block; word-break:break-all;">${data.final_video_path}</code>
-                    `;
-                } else {
-                    const msg = data.error || 'Failed to generate video';
-                    const details = (data.details && typeof data.details === 'string') ? ` — ${data.details}` : (data.details?.details ? ` — ${data.details.details}` : '');
-                    throw new Error(msg + details);
-                }
-
-            } catch (error) {
-                // UI State: Error
-                loading.style.display = 'none';
-                resultArea.style.display = 'block';
-                resultArea.className = 'result-error';
-                document.getElementById('resultTitle').innerText = 'Error';
-                document.getElementById('resultMessage').innerText = error.message;
-                document.getElementById('downloadAction').innerHTML = '';
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.details || data.error || 'Failed to split script');
+                project = data;
+                showEditor();
+                setStatus(`${project.scenes.length} scenes ready. Edit text, then generate scenes.`);
+            } catch (e) {
+                err.textContent = e.message;
             } finally {
                 btn.disabled = false;
+                loading.style.display = 'none';
+            }
+        }
+
+        async function generateAllImages() {
+            if (!project || generatingAll || generatingSceneId) return;
+            const btn = document.getElementById('generateScenesBtn');
+            generatingAll = true;
+            btn.disabled = true;
+            updateVideoButton();
+            try {
+                await saveEdits();
+                renderScenes();
+                const pending = project.scenes.filter((s) => !s.imageUrl);
+                if (!pending.length) {
+                    setStatus('All scene images already exist. Click a thumbnail to regenerate one.');
+                    return;
+                }
+                for (let i = 0; i < pending.length; i++) {
+                    setStatus(`Generating image ${i + 1} of ${pending.length}...`);
+                    try {
+                        await generateOneImage(pending[i].sceneId, { skipSave: true });
+                    } catch (_) {
+                        /* keep going so remaining scenes can still generate */
+                    }
+                }
+                setStatus(allImagesReady()
+                    ? 'All scene images ready. You can generate the video.'
+                    : 'Some images failed. Click a placeholder to retry that scene.');
+            } catch (e) {
+                setStatus(e.message, true);
+            } finally {
+                generatingAll = false;
+                generatingSceneId = null;
+                btn.disabled = false;
+                renderScenes();
+                updateVideoButton();
+            }
+        }
+
+        async function generateOneImage(sceneId, options = {}) {
+            if (!project || generatingSceneId) return;
+            if (generatingAll && !options.skipSave) return;
+
+            generatingSceneId = sceneId;
+            const thumb = document.querySelector(`.scene-thumb[data-scene-id="${sceneId}"]`);
+            if (thumb) thumb.classList.add('busy');
+            updateVideoButton();
+            if (!options.skipSave) setStatus(`Generating image for ${sceneId}...`);
+            try {
+                if (!options.skipSave) await saveEdits();
+                const res = await fetch(
+                    `${API}/api/projects/${encodeURIComponent(project.projectId)}/scenes/${encodeURIComponent(sceneId)}/generate-image`,
+                    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+                );
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.details || data.error || 'Image generation failed');
+                project = data;
+                renderScenes();
+                if (!options.skipSave) {
+                    setStatus(allImagesReady()
+                        ? 'All scene images ready. You can generate the video.'
+                        : `Updated ${sceneId}.`);
+                }
+            } catch (e) {
+                setStatus(e.message, true);
+                if (options.skipSave) throw e;
+            } finally {
+                generatingSceneId = null;
+                document.querySelectorAll('.scene-thumb.busy').forEach((el) => el.classList.remove('busy'));
+                updateVideoButton();
+            }
+        }
+
+        async function generateVideo() {
+            if (!project || !allImagesReady() || scenesDirty()) return;
+            const btn = document.getElementById('generateVideoBtn');
+            btn.disabled = true;
+            setStatus(project?.videoUrl
+                ? 'Rebuilding video from existing scene images and voice...'
+                : 'Rendering video from scene images and narration...');
+            try {
+                await saveEdits();
+                renderScenes();
+                if (!allImagesReady()) {
+                    setStatus('Scene text changed. Generate those scene images again before creating the video.', true);
+                    return;
+                }
+                const res = await fetch(
+                    `${API}/api/projects/${encodeURIComponent(project.projectId)}/generate-video`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ttsProvider: document.getElementById('ttsProvider').value,
+                        }),
+                    }
+                );
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.details || data.error || 'Video generation failed');
+                project = data;
+                const src = imageSrc(project.videoUrl) + `?t=${Date.now()}`;
+                document.getElementById('previewBox').innerHTML =
+                    `<video controls src="${src}"></video>`;
+                const dl = document.getElementById('downloadLink');
+                dl.href = imageSrc(project.videoDownloadUrl);
+                dl.style.display = 'block';
+                setStatus('Video ready. Preview above or download.');
+            } catch (e) {
+                setStatus(e.message, true);
+            } finally {
+                updateVideoButton();
             }
         }
     </script>
