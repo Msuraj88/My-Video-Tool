@@ -1,16 +1,18 @@
 /**
  * Locked narrator character for every scene.
- * Appearance is fixed — scene prompts may only change pose, expression, and setting.
- * Matches the 2D outline reference: young man, spiky black hair, navy crew-neck sweater.
+ * Minimalist stick figure — same design in every frame; only pose and expression change.
  */
-const CHARACTER_NAME = 'Arjun';
+const CHARACTER_NAME = 'Stickman';
 
-const CHARACTER_LOCK = `LOCKED CHARACTER — ${CHARACTER_NAME} — identical in every scene, do not redesign. Young adult man, pale skin, short messy spiky jet-black hair, large oval eyes with heavy upper lids and simple black pupils, small simple nose, thin mouth, clean-shaven, no beard, no stubble, no glasses, slightly large rounded head, simple webtoon facial features. Wearing a plain solid dark navy-blue crew-neck sweater, no collar, no shirt underneath, no logos. Simple casual proportions, bold uniform black outlines on face, hair, and clothes. He is the ONLY person in the frame — never a second person, never a duplicate, never a different haircut or outfit.`;
+const CHARACTER_SHORT = `simple stick figure: perfectly round white head, two solid black dot eyes, one curved line mouth, thin black stick arms and legs (single lines, no muscles, no hands with fingers), black waistcoat over white shirt, tiny black bow tie, black ink doodle style`;
+
+const CHARACTER_LOCK = `LOCKED CHARACTER — ${CHARACTER_NAME} — ONLY draw this simple stick figure for every person in the scene. Perfectly round head (white fill, black outline). Two solid black oval/dot eyes. One simple curved line mouth. NO nose, NO ears, NO hair, NO beard, NO skin texture, NO realistic face, NO detailed cartoon face, NO vector human. Body is thin black stick lines only — stick arms, stick legs, no muscles, no realistic hands. Same outfit always: black waistcoat, white shirt, small black bow tie. If multiple people appear, every one is an identical copy of this stick figure. NEVER draw a detailed vector man, woman, or corporate infographic character.`;
 
 const characterProfile = {
     name: CHARACTER_NAME,
     description: CHARACTER_LOCK,
     CHARACTER_NAME,
+    CHARACTER_SHORT,
     CHARACTER_LOCK,
 };
 

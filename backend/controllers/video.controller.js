@@ -69,8 +69,13 @@ async function generateImageForScene(project, sceneIndex) {
     const sceneName = `${project.projectId}_${scene.sceneId}`;
     const previousScenes = project.scenes
         .slice(0, sceneIndex)
-        .map((s) => s.sceneMemory)
-        .filter(Boolean);
+        .map((s) => ({
+            text: s.text,
+            narration: s.sceneMemory?.narration,
+            sceneVisual: s.sceneMemory?.sceneVisual,
+            setting: s.sceneMemory?.setting,
+        }))
+        .filter((s) => s.text || s.sceneVisual);
 
     await ensureVisualPlan(project);
 
@@ -214,15 +219,32 @@ exports.generateAllImages = async (req, res) => {
         await ensureVisualPlan(project);
         saveProject(project);
 
+        const failures = [];
         for (let i = 0; i < project.scenes.length; i++) {
             if (!regenerateAll && project.scenes[i].imageFile) continue;
-            console.log(`Generating image ${i + 1}/${project.scenes.length} (${project.scenes[i].sceneId})`);
-            await generateImageForScene(project, i);
+            const sceneId = project.scenes[i].sceneId;
+            console.log(`Generating image ${i + 1}/${project.scenes.length} (${sceneId})`);
+            try {
+                await generateImageForScene(project, i);
+                project.scenes[i].error = null;
+            } catch (sceneErr) {
+                console.error(`Image generation failed for ${sceneId}:`, sceneErr.message);
+                project.scenes[i].error = sceneErr.message || 'Image generation failed';
+                failures.push(sceneId);
+            }
             saveProject(project);
         }
 
         project.video = null;
         saveProject(project);
+
+        if (failures.length) {
+            return res.status(207).json({
+                ...publicProject(project),
+                partialFailures: failures,
+                message: `${failures.length} scene(s) failed to generate. Others are ready.`,
+            });
+        }
         return res.status(200).json(publicProject(project));
     } catch (error) {
         console.error('generateAllImages error:', error);

@@ -1,53 +1,154 @@
 /**
- * Google Vertex AI Imagen 3 image generation.
- * Uses text-only prompt generation — no reference image files.
+ * Google Vertex AI image generation via Gemini 2.5 Flash Image.
  * Character consistency is maintained entirely through prompt engineering.
  */
 
 const fs = require('fs');
 const path = require('path');
-const { getKeyPath, getGoogleAccessToken } = require('../utils/googleAuth');
+const { GoogleGenAI, Modality } = require('@google/genai');
+const { getKeyPath } = require('../utils/googleAuth');
 const { frameImageForVideo, TARGET_WIDTH, TARGET_HEIGHT } = require('../utils/imageFraming');
 const { imagesDir } = require('../utils/tempDirs');
+const { buildStoryFirstPrompt } = require('../utils/storyPromptBuilder');
+const { getCharacterReferenceImages } = require('../utils/characterReference');
 
-const fetchFn = typeof globalThis.fetch !== 'undefined' ? globalThis.fetch : require('node-fetch');
+const MODEL_ID = 'gemini-2.5-flash-image';
 
-const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
-const LOCATION = process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
-const STANDARD_MODEL_ID = 'imagen-3.0-generate-001';
-const FAST_MODEL_ID = 'imagen-3.0-fast-generate-001';
+const DEFAULT_NEGATIVE_PROMPT = `gibberish text, fake letters, garbled writing, misspelled words, random characters, paragraphs of text, sentences, captions, subtitles, cluttered text everywhere, text on every object, Chinese characters, Japanese characters, Devanagari, Hindi script, empty blank background, plain solid color only, characters alone with no props, character portrait only, photorealistic, 3D render, realistic human, detailed cartoon man, detailed cartoon woman, vector character with hair, facial features, beard, jeans, suit jacket, webtoon character, anime character, watermark`;
 
-const DEFAULT_NEGATIVE_PROMPT = `photorealistic, 3D render, realistic photo, complex gradients, two people, duplicate character, different character, brown hair, beard, white collared shirt, watermark, distorted face`;
+const TRANSIENT_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'EAI_AGAIN', 'ENOTFOUND']);
+const TRANSIENT_HTTP = new Set([429, 500, 502, 503, 504]);
+const PERMANENT_HTTP = new Set([400, 401, 403, 404]);
+const RETRY_DELAYS_MS = [2000, 5000, 10000];
+const MAX_ATTEMPTS = 3;
 
-function getModelId() {
-    return (process.env.IMAGEN_QUALITY || 'standard').toLowerCase() === 'fast'
-        ? FAST_MODEL_ID
-        : STANDARD_MODEL_ID;
+function getProjectId() {
+    return process.env.GOOGLE_CLOUD_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
 }
 
-function buildVertexPayload(prompt, negativePrompt) {
-    const modelId = getModelId();
-    return {
-        modelId,
-        payload: {
-            instances: [
-                {
-                    prompt: String(prompt || '').trim()
-                }
-            ],
-            parameters: {
-                sampleCount: 1,
-                negativePrompt: negativePrompt || DEFAULT_NEGATIVE_PROMPT,
-                language: 'en',
-                aspectRatio: '16:9',
-                addWatermark: false
-            }
+function getLocation() {
+    return process.env.GOOGLE_CLOUD_LOCATION || 'us-central1';
+}
+
+function resolveCredentialPath() {
+    const raw = getKeyPath();
+    if (!raw) return null;
+    return path.isAbsolute(raw) ? raw : path.resolve(__dirname, '..', raw);
+}
+
+function buildPrompt(scenePrompt, negativePrompt) {
+    return buildStoryFirstPrompt(scenePrompt, { negativePrompt, compactStyle: false });
+}
+
+function buildContents(textPrompt) {
+    const refs = getCharacterReferenceImages();
+    if (!refs.length) {
+        return [{ role: 'user', parts: [{ text: textPrompt }] }];
+    }
+
+    console.log(`[GOOGLE IMAGE] Using stickman reference: ${refs[0].path}`);
+    return [{
+        role: 'user',
+        parts: [
+            {
+                inlineData: {
+                    mimeType: 'image/png',
+                    data: refs[0].bytesBase64Encoded,
+                },
+            },
+            {
+                text: `CHARACTER REFERENCE — copy this exact stick figure design for every person in the scene (round head, stick limbs, waistcoat, bow tie). Never draw a detailed vector human or cartoon person with hair. Ignore any lettering in the reference image; follow only the text rule stated below.\n\n${textPrompt}`,
+            },
+        ],
+    }];
+}
+
+function extractStatus(err) {
+    const status = err?.status || err?.code || err?.statusCode || err?.cause?.status;
+    if (typeof status === 'number') return status;
+    if (typeof status === 'string' && /^\d+$/.test(status)) return parseInt(status, 10);
+    const match = String(err?.message || '').match(/\b(400|401|403|404|429|500|502|503|504)\b/);
+    return match ? parseInt(match[1], 10) : null;
+}
+
+function extractCauseCode(err) {
+    return err?.cause?.code || err?.code || '';
+}
+
+function isTransientError(err) {
+    const status = extractStatus(err);
+    if (status && TRANSIENT_HTTP.has(status)) return true;
+    if (status && PERMANENT_HTTP.has(status)) return false;
+    const code = extractCauseCode(err);
+    if (TRANSIENT_CODES.has(code)) return true;
+    return /ECONNRESET|ETIMEDOUT|fetch failed|socket hang up/i.test(String(err?.message || ''));
+}
+
+function describeApiError(err, location) {
+    const status = extractStatus(err);
+    const original = err?.message || String(err);
+    if (status === 403) {
+        return `Google image generation 403 (permission). Reason: ${original}`;
+    }
+    if (status === 404) {
+        return [
+            'Google image generation 404 NOT_FOUND.',
+            `Check model name (${MODEL_ID}), Vertex generateContent endpoint, region (${location}), and API version.`,
+            `Original: ${original}`,
+        ].join(' ');
+    }
+    if (status) {
+        return `Google image generation failed (${status}): ${original}`;
+    }
+    return `Google image generation failed: ${original}`;
+}
+
+function extractImageBuffer(response) {
+    const parts = response?.candidates?.[0]?.content?.parts;
+    if (Array.isArray(parts)) {
+        for (const part of parts) {
+            const inline = part?.inlineData || part?.inline_data;
+            if (!inline?.data) continue;
+            if (Buffer.isBuffer(inline.data)) return inline.data;
+            if (inline.data instanceof Uint8Array) return Buffer.from(inline.data);
+            return Buffer.from(inline.data, 'base64');
         }
-    };
+    }
+    if (response?.data) {
+        if (Buffer.isBuffer(response.data)) return response.data;
+        if (response.data instanceof Uint8Array) return Buffer.from(response.data);
+        if (typeof response.data === 'string') return Buffer.from(response.data, 'base64');
+    }
+    return null;
+}
+
+function createClient(projectId, location, credentialPath) {
+    return new GoogleGenAI({
+        vertexai: true,
+        project: projectId,
+        location,
+        googleAuthOptions: {
+            keyFilename: credentialPath,
+            scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+        },
+    });
+}
+
+async function generateOnce(client, contents) {
+    return client.models.generateContent({
+        model: MODEL_ID,
+        contents,
+        config: {
+            responseModalities: [Modality.TEXT, Modality.IMAGE],
+            imageConfig: {
+                aspectRatio: '16:9',
+            },
+        },
+    });
 }
 
 /**
- * Calls Vertex AI Imagen 3. Prompt comes from our pipeline (scenePromptGenerator + style).
+ * Calls Gemini 2.5 Flash Image on Vertex AI. Prompt comes from our pipeline.
  *
  * @param {string} prompt - Full image prompt from our pipeline.
  * @param {string} sceneName - Scene id for filenames.
@@ -55,67 +156,66 @@ function buildVertexPayload(prompt, negativePrompt) {
  * @returns {Promise<string>} - Path to saved 1280x720 PNG.
  */
 async function generateAndSaveSceneImageGoogle(prompt, sceneName, options = {}) {
-    if (!PROJECT_ID) {
-        throw new Error('GOOGLE_CLOUD_PROJECT_ID or GOOGLE_CLOUD_PROJECT environment variable is required for Google Imagen.');
-    }
+    const projectId = getProjectId();
+    const location = getLocation();
+    const credentialPath = resolveCredentialPath();
 
-    if (!getKeyPath()) {
+    if (!projectId) {
+        throw new Error('GOOGLE_CLOUD_PROJECT_ID or GOOGLE_CLOUD_PROJECT environment variable is required for Google image generation.');
+    }
+    if (!credentialPath || !fs.existsSync(credentialPath)) {
         throw new Error('Service account key not found. Set GOOGLE_APPLICATION_CREDENTIALS or place the JSON key in backend/.');
     }
 
     const negativePrompt = (options.negativePrompt && options.negativePrompt.trim()) || DEFAULT_NEGATIVE_PROMPT;
-    const { modelId, payload } = buildVertexPayload(prompt, negativePrompt);
+    const textPrompt = buildPrompt(prompt, negativePrompt);
+    const contents = buildContents(textPrompt);
+    const storyLead = textPrompt.split('\n\n')[0] || '';
+    console.log(`[GOOGLE IMAGE] Stickman lead (${sceneName}): ${storyLead.slice(0, 220).replace(/\s+/g, ' ')}...`);
+    const client = createClient(projectId, location, credentialPath);
 
-    try {
-        console.log(`Generating image using Google Imagen (${modelId})...`);
-        console.log(`Scene: ${sceneName}`);
+    console.log(`[GOOGLE IMAGE] Model: ${MODEL_ID}`);
+    console.log(`[GOOGLE IMAGE] Project: ${projectId}`);
+    console.log(`[GOOGLE IMAGE] Location: ${location}`);
+    console.log(`[GOOGLE IMAGE] Scene: ${sceneName}`);
+    console.log('[GOOGLE IMAGE] Generating...');
 
-        const accessToken = await getGoogleAccessToken();
-        const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${modelId}:predict`;
-
-        const response = await fetchFn(url, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-        });
-
-        const responseBody = await response.text();
-        if (!response.ok) {
-            console.error('Vertex Imagen API error - HTTP status:', response.status);
-            console.error('Vertex Imagen API error - response body:', responseBody);
-            throw new Error(`Vertex Imagen API failed: ${response.status} - ${responseBody}`);
+    let lastError;
+    let response;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+            response = await generateOnce(client, contents);
+            break;
+        } catch (err) {
+            lastError = err;
+            const status = extractStatus(err);
+            console.error(`[GOOGLE IMAGE] Attempt ${attempt}/${MAX_ATTEMPTS} failed: ${describeApiError(err, location)}`);
+            if (!isTransientError(err) || attempt === MAX_ATTEMPTS) {
+                const wrapped = new Error(describeApiError(err, location));
+                wrapped.cause = err;
+                if (status) wrapped.status = status;
+                throw wrapped;
+            }
+            const delay = RETRY_DELAYS_MS[attempt - 1] || 10000;
+            console.log(`[GOOGLE IMAGE] Retrying in ${delay / 1000}s...`);
+            await new Promise((r) => setTimeout(r, delay));
         }
-
-        const data = JSON.parse(responseBody);
-        if (!data.predictions || data.predictions.length === 0) {
-            console.error('Vertex Imagen API - unexpected response (no predictions):', JSON.stringify(data));
-            throw new Error('No predictions returned from Vertex Imagen');
-        }
-
-        const pred = data.predictions[0];
-        const bytesBase64 = pred.bytesBase64Encoded || pred.bytesBase64;
-        if (!bytesBase64) {
-            console.error('Vertex Imagen API - missing image data. Keys received:', JSON.stringify(Object.keys(pred || {})));
-            throw new Error('Imagen response missing bytesBase64');
-        }
-
-        const buffer = Buffer.from(bytesBase64, 'base64');
-        const safeSceneName = sceneName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        const baseName = `${safeSceneName}_google_${Date.now()}`;
-        const finalPath = path.join(imagesDir(), `${baseName}.png`);
-
-        const framedBuffer = await frameImageForVideo(buffer);
-        fs.writeFileSync(finalPath, framedBuffer);
-        console.log(`Saved Google Imagen image to ${finalPath} (${TARGET_WIDTH}x${TARGET_HEIGHT})`);
-
-        return finalPath;
-    } catch (error) {
-        console.error(`Google Imagen error for ${sceneName}:`, error.message);
-        throw error;
     }
+
+    const buffer = extractImageBuffer(response);
+    if (!buffer || !buffer.length) {
+        throw new Error('Google image generation returned no image data in Gemini response parts.');
+    }
+
+    console.log('[GOOGLE IMAGE] Generated successfully');
+
+    const safeSceneName = sceneName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const baseName = `${safeSceneName}_google_${Date.now()}`;
+    const finalPath = path.join(imagesDir(), `${baseName}.png`);
+    const framedBuffer = await frameImageForVideo(buffer);
+    fs.writeFileSync(finalPath, framedBuffer);
+    console.log(`[GOOGLE IMAGE] Saved: ${finalPath} (${TARGET_WIDTH}x${TARGET_HEIGHT})`);
+    return finalPath;
 }
 
 module.exports = {

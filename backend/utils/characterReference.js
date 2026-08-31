@@ -3,6 +3,7 @@ const path = require('path');
 
 const DEFAULT_REFERENCE_CANDIDATES = [
     process.env.CHARACTER_REFERENCE_IMAGE,
+    path.join(__dirname, '../assets/stickman-reference.png'),
     path.join(__dirname, '../assets/character-reference.png'),
     path.join(__dirname, '../assets/character.png'),
     path.join(__dirname, '../character-reference.png'),

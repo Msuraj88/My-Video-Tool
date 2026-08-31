@@ -1,7 +1,7 @@
 {
     "id": "explainer_main",
-    "name": "Arjun",
-    "description": "Young adult man, pale skin, short messy spiky jet-black hair, large oval eyes with heavy upper lids and simple black pupils, small simple nose, thin mouth, clean-shaven. Wearing a plain solid dark navy-blue crew-neck sweater. Clean 2D outline webtoon character, bold black outlines, same design every scene.",
-    "style": "Clean 2D vector outline illustration, bold black outlines, flat cel-shading, muted cool blue-gray palette, conceptual infographic explainer",
-    "image_reference_url": "/assets/characters/explainer.png"
+    "name": "Stickman",
+    "description": "Simple minimalist stick figure only: round white head, black dot eyes, curved line mouth, thin stick arms and legs, black waistcoat, white shirt, black bow tie. Black ink doodle style. Never a detailed vector human.",
+    "style": "Minimalist stick figure doodle explainer infographic. Simple black ink stick figures only — never detailed vector humans.",
+    "image_reference_url": "/assets/stickman-reference.png"
 }

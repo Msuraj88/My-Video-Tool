@@ -3,10 +3,10 @@
  * Uses the whole-script visual plan so each frame is conceptual and consistent.
  */
 
-const { generateScenePrompt, buildFinalImagePrompt } = require('./scenePromptGenerator');
+const { generateScenePrompt, buildFinalImagePrompt, buildNarrationDrivenFallback } = require('./scenePromptGenerator');
 const { NEGATIVE_PROMPT } = require('../config/imageStyleGuide');
 
-const FALLBACK_SCENE = 'sits on a sofa with a laptop, dim living room, no captions';
+const FALLBACK_SCENE = buildNarrationDrivenFallback('');
 
 /**
  * @param {string} sceneText
@@ -15,27 +15,34 @@ const FALLBACK_SCENE = 'sits on a sofa with a laptop, dim living room, no captio
 async function buildScenePrompt(sceneText, options = {}) {
     const previousScenes = Array.isArray(options.previousScenes) ? options.previousScenes : [];
 
-    let prompt;
+    let imagePrompt;
+    let sceneVisual = null;
     try {
-        prompt = await generateScenePrompt(sceneText || '', options);
+        const result = await generateScenePrompt(sceneText || '', options);
+        imagePrompt = result.imagePrompt;
+        sceneVisual = result.sceneVisual;
     } catch (err) {
         console.error('Scene prompt generation failed, using fallback:', err.message);
-        prompt = buildFinalImagePrompt(FALLBACK_SCENE, sceneText || '', null);
+        imagePrompt = buildFinalImagePrompt(FALLBACK_SCENE, sceneText || '', null);
+        sceneVisual = FALLBACK_SCENE;
     }
 
+    const planned = options.visualPlan?.scenes?.[options.sceneIndex] || null;
     const sceneMemory = {
-        character: 'Arjun',
-        style: '2d_outline_infographic',
+        character: 'Stickman',
+        style: 'stickman_doodle_infographic',
         cameraFraming: 'medium shot',
         concept: 'openai_generated',
         previousCount: previousScenes.length,
-        roleInStory: options.visualPlan?.scenes?.[options.sceneIndex]?.roleInStory || null,
+        roleInStory: planned?.roleInStory || options.visualPlan?.scenes?.[options.sceneIndex]?.roleInStory || null,
+        narration: String(sceneText || '').slice(0, 160),
+        setting: planned?.setting || null,
+        sceneVisual: sceneVisual ? String(sceneVisual).slice(0, 500) : null,
     };
-
     return {
-        prompt,
+        prompt: imagePrompt,
         negativePrompt: NEGATIVE_PROMPT,
-        sceneMemory
+        sceneMemory,
     };
 }
 

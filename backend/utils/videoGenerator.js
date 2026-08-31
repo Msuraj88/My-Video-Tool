@@ -57,9 +57,20 @@ function createSceneVideo(imagePath, audioPath, sceneName, options = {}) {
                 console.warn(`Could not determine audio duration for ${sceneName} (logging only):`, err.message);
             }
 
-            const videoDurationSec = audioDurationSec + POST_AUDIO_BUFFER_SECONDS;
+            // Snap to a whole frame so the audio and video streams end on the exact same
+            // timestamp. Fractional-frame clips leave a sub-frame gap that the concat
+            // demuxer accumulates, drifting narration ahead of the images over a long video.
+            const rawDuration = audioDurationSec + POST_AUDIO_BUFFER_SECONDS;
+            const videoDurationSec = Math.round(rawDuration * VIDEO_FPS) / VIDEO_FPS;
             const fadeOutStart = Math.max(0, videoDurationSec - AUDIO_FADE_DURATION);
-            const afilter = `afade=t=in:st=0:d=${AUDIO_FADE_DURATION},afade=t=out:st=${fadeOutStart}:d=${AUDIO_FADE_DURATION}`;
+            // apad fills the trailing buffer with silence so the audio stream is exactly
+            // as long as the video stream rather than ending early.
+            const afilter = [
+                `afade=t=in:st=0:d=${AUDIO_FADE_DURATION}`,
+                `afade=t=out:st=${fadeOutStart}:d=${AUDIO_FADE_DURATION}`,
+                'apad',
+                'aresample=48000:async=1:first_pts=0',
+            ].join(',');
             const vfilter = buildKenBurnsFilter(direction, videoDurationSec);
 
             ffmpeg()
@@ -72,10 +83,14 @@ function createSceneVideo(imagePath, audioPath, sceneName, options = {}) {
                     '-crf', '18',
                     '-c:a aac',
                     '-b:a 192k',
+                    '-ar', '48000',
+                    '-ac', '2',
                     '-af', afilter,
                     '-pix_fmt yuv420p',
                     '-r', String(VIDEO_FPS),
-                    '-t', String(videoDurationSec),
+                    '-vsync', 'cfr',
+                    '-t', videoDurationSec.toFixed(3),
+                    '-avoid_negative_ts', 'make_zero',
                 ])
                 .save(outputPath)
                 .on('end', () => {
@@ -126,10 +141,13 @@ function concatenateVideos(videoPaths, outputPath) {
             .input(listFilePath)
             .inputOptions([
                 '-f concat',
-                '-safe 0'
+                '-safe 0',
+                '-fflags', '+genpts',
             ])
             .outputOptions([
-                '-c copy' // Stream copy, NO re-encoding
+                '-c copy', // Stream copy, NO re-encoding
+                '-avoid_negative_ts', 'make_zero',
+                '-max_interleave_delta', '0',
             ])
             .save(finalOutputPath)
             .on('end', () => {
