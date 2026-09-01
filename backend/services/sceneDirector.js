@@ -8,13 +8,19 @@
 // VISUAL CONCEPT DETECTION — sentence → concept label (aligns image to narration)
 // -----------------------------------------------------------------------------
 
-/** Concept keywords: order matters; first match wins. More specific before general. */
+/** Concept keywords: order matters; first match wins. Story beats before finance mechanics. */
 const CONCEPT_KEYWORDS = [
-    { concept: 'credit_card_payment', patterns: [/\bcredit card\b/, /\bpays? off\b/, /\bbalance\b/, /\bcard payment\b/, /\bpay(ing)? (your )?credit card\b/i] },
-    { concept: 'saving_money', patterns: [/\bsave\b/, /\bsaving\b/, /\bsavings\b/, /\bpiggy bank\b/, /\bput(ting)? (money )?aside\b/i] },
-    { concept: 'paying_bills', patterns: [/\bbills?\b/, /\bpay(ing)? bills?\b/, /\binvoices?\b/, /\butility\b/, /\bmonthly payment\b/i] },
-    { concept: 'investing', patterns: [/\binvest\b/, /\binvestment\b/, /\binvesting\b/, /\bstocks?\b/, /\bportfolio\b/, /\breturns?\b/i] },
-    { concept: 'debt', patterns: [/\bdebt\b/, /\bowe\b/, /\bowing\b/, /\bpay(ing)? down\b/, /\bpayoff\b/i] },
+    { concept: 'character_introduction', patterns: [/मिलो/i, /\bmeet\b/i, /\bintroduc/i, /परिचय/i] },
+    { concept: 'attitude_comparison', patterns: [/सोच/i, /\battitude\b/i, /\bmindset\b/i, /अलग है/i, /\bstability\b/i, /पसंद है/i] },
+    { concept: 'equal_situation', patterns: [/financial situation/i, /एक जैस/i, /बिल्कुल same/i, /same है/i, /equal/i] },
+    { concept: 'shared_savings', patterns: [/\bsavings?\b/i, /बचत/i, /लाख/i, /रुपय/i, /₹/] },
+    { concept: 'demographics', patterns: [/उम्र/i, /\bage\b/i, /तीस/i, /thirty/i, /शहर/i, /\bcity\b/i, /रहते/i, /\blive/i] },
+    { concept: 'income_comparison', patterns: [/\bincome\b/i, /\bsalary\b/i, /वेतन/i, /आय/i] },
+    { concept: 'credit_card_payment', patterns: [/\bcredit card\b/, /\bpays? off\b/, /\bbalance\b/, /\bcard payment\b/i] },
+    { concept: 'saving_money', patterns: [/\bsave\b/, /\bsaving\b/, /\bpiggy bank\b/i] },
+    { concept: 'paying_bills', patterns: [/\bbills?\b/, /\bpay(ing)? bills?\b/, /\binvoices?\b/i] },
+    { concept: 'investing', patterns: [/\binvest\b/, /\binvestment\b/, /\bstocks?\b/, /\bportfolio\b/i] },
+    { concept: 'debt', patterns: [/\bdebt\b/, /\bowe\b/, /\bloan\b/i] },
 ];
 
 /**
@@ -24,12 +30,13 @@ const CONCEPT_KEYWORDS = [
  * @returns {string} Concept key used in VISUAL_SCENE_TEMPLATES.
  */
 function detectVisualConcept(sentence) {
-    if (!sentence || typeof sentence !== 'string') return 'general_finance';
-    const lower = sentence.trim().toLowerCase();
+    if (!sentence || typeof sentence !== 'string') return 'story_moment';
+    const text = sentence.trim();
+    const lower = text.toLowerCase();
     for (const { concept, patterns } of CONCEPT_KEYWORDS) {
-        if (patterns.some(p => p.test(lower))) return concept;
+        if (patterns.some((p) => p.test(text) || p.test(lower))) return concept;
     }
-    return 'general_finance';
+    return 'story_moment';
 }
 
 /**
@@ -37,32 +44,48 @@ function detectVisualConcept(sentence) {
  * Ensures each concept generates a different visual (no repeated poses/environments).
  */
 const VISUAL_SCENE_TEMPLATES = {
-    credit_card_payment: 'stick figure beside credit card statement showing balance $0 with a large PAID stamp and green checkmark',
-    saving_money: 'stick figure dropping coins into a piggy bank with coins stacking beside it',
-    paying_bills: 'stick figure holding stacked bills and invoices with paid stamps',
-    investing: 'stick figure beside investment chart rising upward, analyzing financial growth',
-    debt: 'stick figure looking at credit card bill showing red balance warning',
-    general_finance: 'stick figure beside large conceptual diagram or symbolic objects that explain the finance idea'
+    character_introduction: 'two stick figures standing together on a modern Indian city street, both facing the viewer with friendly relaxed poses, equal visual importance',
+    attitude_comparison: 'two stick figures side by side showing clearly different body language and attitudes through pose and expression only',
+    equal_situation: 'two stick figures beside two identical equal-sized jars or stacks showing their situations are the same',
+    shared_savings: 'two stick figures beside two equal-height savings jars showing the same amount saved',
+    demographics: 'two stick figures together with a simple city skyline behind them, same age, same place',
+    income_comparison: 'two stick figures beside two equal pay envelopes or income bars of the same height',
+    credit_card_payment: 'stick figure beside credit card statement with a paid stamp',
+    saving_money: 'stick figure placing coins into a piggy bank',
+    paying_bills: 'stick figure holding stacked bills with a payment checkmark',
+    investing: 'stick figure beside a rising growth curve',
+    debt: 'stick figure beside a loan document with a warning symbol',
+    story_moment: 'stick figures acting out the specific narration moment through pose, environment, and props',
 };
 
-/** Character action per concept — always the locked Stickman stick figure. */
 const CONCEPT_CHARACTER_ACTIONS = {
+    character_introduction: 'two Stickman stick figures (Amit and Rohan) stand together facing the viewer with welcoming relaxed poses on a city street',
+    attitude_comparison: 'Amit stick figure stands calmly in a grounded stable pose while Rohan stick figure stands in a contrasting energetic pose beside him',
+    equal_situation: 'two Stickman stick figures stand beside two identical equal jars showing their financial starting points match',
+    shared_savings: 'two Stickman stick figures gesture toward two equal-height savings jars between them',
+    demographics: 'two Stickman stick figures stand together in the same city environment, same height, same age',
+    income_comparison: 'two Stickman stick figures stand beside two equal-height income bars showing they earn the same',
     credit_card_payment: 'Stickman stick figure pointing at a credit card statement with balance and paid stamp',
     saving_money: 'Stickman stick figure dropping coins into a piggy bank',
     paying_bills: 'Stickman stick figure holding stacked bills and invoices with a payment checkmark',
     investing: 'Stickman stick figure analyzing financial growth beside an investment chart',
     debt: 'Stickman stick figure looking at a credit card bill with red balance warning',
-    general_finance: 'Stickman stick figure gesturing toward large symbolic objects that explain the finance concept'
+    story_moment: 'Stickman stick figures acting out the narration moment with clear pose and environment',
 };
 
-/** Expression per concept for visual alignment. */
 const CONCEPT_EXPRESSIONS = {
+    character_introduction: 'friendly welcoming expressions',
+    attitude_comparison: 'contrasting expressions showing different attitudes',
+    equal_situation: 'neutral equal expressions on both figures',
+    shared_savings: 'pleased equal expressions',
+    demographics: 'friendly relaxed expressions',
+    income_comparison: 'neutral satisfied expressions',
     credit_card_payment: 'confident expression',
     saving_money: 'positive expression',
     paying_bills: 'focused expression',
     investing: 'engaged expression',
     debt: 'worried expression',
-    general_finance: 'neutral confident expression'
+    story_moment: 'expression matching the narration mood',
 };
 
 /**
@@ -73,10 +96,11 @@ const CONCEPT_EXPRESSIONS = {
  */
 function buildSceneDescriptionFromSentence(sentence) {
     const concept = detectVisualConcept(sentence);
-    const template = VISUAL_SCENE_TEMPLATES[concept] || VISUAL_SCENE_TEMPLATES.general_finance;
-    const characterAction = CONCEPT_CHARACTER_ACTIONS[concept] || CONCEPT_CHARACTER_ACTIONS.general_finance;
-    const expression = CONCEPT_EXPRESSIONS[concept] || CONCEPT_EXPRESSIONS.general_finance;
-    const sceneDescription = `${characterAction}, ${template}, ${expression}`;
+    const direction = generateSceneDirection(sentence);
+    const template = VISUAL_SCENE_TEMPLATES[concept] || VISUAL_SCENE_TEMPLATES.story_moment;
+    const characterAction = direction.action || CONCEPT_CHARACTER_ACTIONS[concept] || CONCEPT_CHARACTER_ACTIONS.story_moment;
+    const expression = CONCEPT_EXPRESSIONS[concept] || CONCEPT_EXPRESSIONS.story_moment;
+    const sceneDescription = `${direction.characters}, ${characterAction}, in ${direction.environment}, ${expression}`;
     return { sceneDescription, concept, template };
 }
 
@@ -184,26 +208,47 @@ function extractHighlightPhrases(text) {
 function classifySceneType(text) {
     if (!text || typeof text !== 'string') return 'action demonstration';
     const lower = text.toLowerCase();
-    if (/\b(welcome|introduce|today we|let's talk|hello)\b/.test(lower)) return 'introduction';
-    if (/\b(problem|waste|throw away|lost|risk|danger|wrong)\b/.test(lower)) return 'problem illustration';
-    if (/\b(average|statistic|percent|%|every year|survey|study|data)\b/.test(lower)) return 'statistic visualization';
-    if (/\b(crowd|people|families|millions|everyone)\b/.test(lower) && /\b(percent|majority|most)\b/.test(lower)) return 'crowd statistic';
-    if (/\b(versus|vs|compared to|difference between|instead of|rather than)\b/.test(lower)) return 'comparison';
+    if (/मिलो|meet|introduc|परिचय|welcome|hello/i.test(text)) return 'introduction';
+    if (/सोच|attitude|mindset|अलग|stability|पसंद/i.test(text)) return 'comparison';
+    if (/problem|waste|throw away|lost|risk|danger|wrong/i.test(lower)) return 'problem illustration';
+    if (/average|statistic|percent|%|every year|survey|study|data/i.test(lower)) return 'statistic visualization';
+    if (/crowd|people|families|millions|everyone/i.test(lower) && /percent|majority|most/i.test(lower)) return 'crowd statistic';
+    if (/versus|vs|compared to|difference between|instead of|rather than|बनाम|तुलना/i.test(lower)) return 'comparison';
     return 'action demonstration';
 }
 
-/**
- * Infers character(s) from narration.
- * @param {string} text
- * @returns {string}
- */
+function extractNamedCharacters(text) {
+    const names = [];
+    const t = String(text || '');
+    if (/अमित|amit/i.test(t)) names.push('Amit');
+    if (/रोहन|rohan/i.test(t)) names.push('Rohan');
+    if (/प्रिया|priya/i.test(t)) names.push('Priya');
+    if (/राज|raj\b/i.test(t)) names.push('Raj');
+    return [...new Set(names)];
+}
+
 function inferCharacters(text) {
     if (!text || typeof text !== 'string') return 'Stickman stick figure narrator';
     const lower = text.toLowerCase();
-    if (/\btwo brothers|brothers\b/.test(lower)) return 'two identical Stickman stick figures (same waistcoat and bow tie design)';
-    if (/\bsiblings|sisters\b/.test(lower)) return 'two identical Stickman stick figures (same design)';
-    if (/\bamerican family|family of four|family\b/.test(lower)) return 'group of identical Stickman stick figures (same design)';
-    if (/\bcrowd|people|everyone|many\b/.test(lower)) return 'group of identical Stickman stick figures (same design)';
+    const names = extractNamedCharacters(text);
+
+    if (names.length >= 2) {
+        return `two identical Stickman stick figures representing ${names.join(' and ')} (same waistcoat and bow tie design, distinguish them with a blue accent on ${names[0]} and a green accent on ${names[1]})`;
+    }
+    if (names.length === 1 && /दोनों|both|together/i.test(text)) {
+        const other = names[0] === 'Amit' ? 'Rohan' : 'Amit';
+        return `two identical Stickman stick figures representing ${names[0]} and ${other} (same design, subtle color accents to tell them apart)`;
+    }
+    if (/दोनों|both\b/i.test(text)) {
+        return 'two identical Stickman stick figures standing together (same waistcoat and bow tie design)';
+    }
+    if (/two brothers|brothers/i.test(lower)) return 'two identical Stickman stick figures (same waistcoat and bow tie design)';
+    if (/siblings|sisters/i.test(lower)) return 'two identical Stickman stick figures (same design)';
+    if (/american family|family of four|family\b/i.test(lower)) return 'group of identical Stickman stick figures (same design)';
+    if (/crowd|people|everyone|many/i.test(lower)) return 'group of identical Stickman stick figures (same design)';
+    if (names.length === 1) {
+        return `Stickman stick figure representing ${names[0]} (waistcoat, bow tie)`;
+    }
     return 'Stickman stick figure narrator';
 }
 
@@ -213,27 +258,38 @@ function inferCharacters(text) {
  * @returns {string}
  */
 function inferAction(text) {
-    if (!text || typeof text !== 'string') return 'explaining the concept with symbolic objects';
+    if (!text || typeof text !== 'string') return 'acting out the narration moment';
     const lower = text.toLowerCase();
-    if (/\bgrew up|growing up|बड़[ae]|पले\b/.test(lower)) return 'standing in front of their house together';
-    if (/\bthrows? away|throwing away|फेंक|बर्बाद\b/.test(lower)) return 'throwing groceries into trash bin';
-    if (/\b(reached|reaches?|paying|payment|भुगतान|चुकान)\b/.test(lower)) return 'standing beside car or payment chart looking concerned';
-    if (/\bspend|spending|खर्च\b/.test(lower)) return 'spending or handling money with visible expense icons';
-    if (/\bsave|saving|बचत|बचान\b/.test(lower)) return 'saving money or placing into piggy bank';
-    if (/\bwaste|wasting|बर्बाद\b/.test(lower)) return 'discarding or wasting resources';
-    if (/\bcompare|comparing|तुलना|बनाम\b/.test(lower)) return 'comparing two options or split path';
-    if (/\bshow|showing|demonstrate|दिखा\b/.test(lower)) return 'demonstrating the concept with large metaphor objects';
-    if (/\bjob|salary|नौकरी|वेतन\b/.test(lower)) return 'beside salary arrow, paycheck, or career path symbols';
-    if (/\bdebt|loan|कर्ज|ऋण\b/.test(lower)) return 'weighing down under debt symbols or loan documents';
-    if (/\binvest|निवेश\b/.test(lower)) return 'beside rising chart or growth arrows';
-    if (/compound|चक्रवृद्धि/.test(lower)) return 'watching wide-eyed as coin stacks grow taller beside a rising curve';
-    if (/interest|ब्याज/.test(lower)) return 'pointing at a coin pile sprouting extra coins';
-    if (/salary|सैलरी|वेतन/.test(lower)) return 'holding a pay envelope while coins pour into a jar';
-    if (/misunderstanding|गलतफहमी|confused|भ्रम/.test(lower)) return 'pointing at tangled arrows and a large question mark';
-    if (/पहचान|recognition/.test(lower)) return 'standing under a small spotlight next to an India map';
-    if (/follower|million|मिलियन/.test(lower)) return 'gesturing at phone showing 1M followers and a TV screen';
-    if (/fame|प्रसिद्धि/.test(lower)) return 'standing on a stage under a spotlight with cameras';
-    return 'presenting the narration idea with clear symbolic objects';
+
+    if (/मिलो|meet|introduc|परिचय/i.test(text)) {
+        return 'standing together facing the viewer with friendly welcoming poses, natural character introduction';
+    }
+    if (/stability|stable|पसंद/i.test(lower) && /amit|अमित/i.test(text)) {
+        return 'Amit stick figure stands calmly in a grounded stable pose beside a solid heavy block, relaxed and steady';
+    }
+    if (/सोच|thought|attitude|mindset|अलग/i.test(text)) {
+        return 'two stick figures side by side with clearly contrasting body language showing different thinking styles';
+    }
+    if (/financial situation|एक जैस|बिल्कुल same|same है/i.test(text)) {
+        return 'both stick figures stand beside two identical equal jars showing their situations match perfectly';
+    }
+    if (/savings|बचत|लाख|रुपय/i.test(text)) {
+        return 'both stick figures gesture toward two equal-height savings jars between them';
+    }
+    if (/income|salary|वेतन|आय/i.test(lower) && /दोनों|both|एक जैस/i.test(text)) {
+        return 'both stick figures stand beside two equal-height income bars showing they earn the same';
+    }
+    if (/उम्र|age|तीस|thirty/i.test(text) && /शहर|city|रहते|live/i.test(text)) {
+        return 'standing together in their shared city environment, same age, relaxed poses';
+    }
+    if (/grew up|growing up|बड़|पले/i.test(text)) return 'standing in front of their house together';
+    if (/throws? away|throwing away|फेंक|बर्बाद/i.test(text)) return 'throwing groceries into trash bin';
+    if (/spend|spending|खर्च/i.test(text)) return 'handling everyday expenses';
+    if (/save|saving|बचत|बचान/i.test(text)) return 'placing savings into a jar';
+    if (/compare|comparing|तुलना|बनाम/i.test(text)) return 'comparing two options side by side';
+    if (/misunderstanding|गलतफहमी|confused|भ्रम/i.test(text)) return 'reacting to confusion with contrasting gestures';
+    if (/fame|प्रसिद्धि/i.test(text)) return 'standing on a stage under a spotlight';
+    return 'acting out the specific narration moment through clear pose and interaction';
 }
 
 /**
@@ -243,12 +299,34 @@ function inferAction(text) {
  * @returns {string[]}
  */
 function inferObjects(text, sceneType) {
-    if (!text || typeof text !== 'string') return ['large concept icon', 'symbolic diagram', 'arrow'];
+    if (!text || typeof text !== 'string') return ['stick figure narrator', 'simple environment'];
     const lower = text.toLowerCase();
     const objects = [];
 
-    // Fame / recognition / social (Hindi + English)
-    // "समझ" alone means "understand" — only treat explicit confusion words as misunderstanding
+    if (/मिलो|amit|rohan|अमित|रोहन/i.test(text)) {
+        objects.push('two stick figures standing together', 'friendly introduction pose');
+    }
+    if (/उम्र|age|तीस|thirty|साल/i.test(text)) {
+        objects.push('subtle same-age visual cue between both figures');
+    }
+    if (/शहर|city|रहते|live/i.test(text)) {
+        objects.push('simple Indian city skyline', 'street ground line');
+    }
+    if (/income|salary|वेतन|आय/i.test(lower) && /एक जैस|same|दोनों|both/i.test(text)) {
+        objects.push('two equal-height income bars', 'matching pay envelopes');
+    }
+    if (/savings|बचत|लाख|रुपय|₹/i.test(text)) {
+        objects.push('two identical savings jars of equal height', 'equal piles beside both figures');
+    }
+    if (/financial situation|बिल्कुल same|एक जैस/i.test(text)) {
+        objects.push('two identical jars showing equal starting conditions', 'mirrored equal props');
+    }
+    if (/stability|stable|पसंद/i.test(lower)) {
+        objects.push('solid heavy cube beside Amit', 'calm grounded stance');
+    }
+    if (/सोच|attitude|mindset|अलग/i.test(text)) {
+        objects.push('contrasting body language between the two figures', 'different poses side by side');
+    }
     if (/misunderstanding|गलतफहमी|confused|confusion|भ्रम/.test(lower)) {
         objects.push('tangled arrows', 'large question mark', 'one straight clean line beside them');
     }
@@ -284,13 +362,13 @@ function inferObjects(text, sceneType) {
     } else if (/interest|ब्याज/.test(lower)) {
         objects.push('single coin sprouting extra coins', 'small upward arrow above a coin pile');
     }
-    if (/salary|सैलरी|वेतन|income|आय|तनख्वाह/.test(lower)) {
-        objects.push('pay envelope', 'coins flowing along an arrow into a jar');
+    if (/salary|सैलरी|वेतन|income|आय|तनख्वाह/i.test(lower) && !/मिलो|शहर|उम्र/i.test(text)) {
+        objects.push('pay envelope', 'income bar');
     }
     if (/power|असली|ताकत|शक्ति/.test(lower)) {
         objects.push('small seed beside a large tree showing growth');
     }
-    if (/time|साल|year|महीन|month|समय/.test(lower)) {
+    if (/time|महीन|month|समय/i.test(lower) && !/उम्र|age|साल/i.test(text)) {
         objects.push('calendar pages stacked along the timeline');
     }
 
@@ -307,10 +385,13 @@ function inferObjects(text, sceneType) {
     if (/\btrash|throw away|waste|फेंक|बर्बाद\b/.test(lower)) objects.push('trash can');
     if (/\bhouse|home|same house|घर\b/.test(lower)) objects.push('house', 'suburban home');
     if (/\bcar|vehicle|payment|auto\b/.test(lower)) objects.push('car');
-    if (/\bmoney|dollar|\$|payment|cost|पैस|रुपय\b/.test(lower)) objects.push('money or payment graphic');
+    if (/money|dollar|\$|payment|cost|पैस/i.test(lower) && /savings|बचत|लाख|रुपय/i.test(text)) {
+        objects.push('equal money jars');
+    }
 
     if (objects.length === 0) {
-        objects.push('large metaphor icon', 'thought bubble with symbol', 'directional arrow');
+        if (/दोनों|both/i.test(text)) return ['two stick figures', 'simple environment with ground line'];
+        return ['stick figure narrator', 'simple environment with ground line'];
     }
     return [...new Set(objects)].slice(0, 5);
 }
@@ -321,12 +402,23 @@ function inferObjects(text, sceneType) {
  * @returns {string}
  */
 function inferEnvironment(text) {
-    if (!text || typeof text !== 'string') return 'simplified explainer stage with props';
+    if (!text || typeof text !== 'string') return 'simplified explainer stage with a ground line';
     const lower = text.toLowerCase();
-    if (/compound|interest|ब्याज|चक्रवृद्धि/.test(lower)) return 'bank hall with a large growth chart on the wall and a ground line';
-    if (/salary|सैलरी|वेतन|income|आय/.test(lower)) return 'simple home table scene with a money jar and a ground line';
-    if (/fame|spotlight|stage|टीवी|tv|celebrity/.test(lower)) return 'stage with spotlight and media props';
-    if (/india|भारत|map|देश/.test(lower)) return 'infographic map backdrop';
+
+    if (/सोच|attitude|mindset|stability|अलग/i.test(text)) {
+        return 'simple neutral backdrop with ground line, focus on the two figures and their contrasting poses';
+    }
+    if (/मिलो|शहर|city|रहते/i.test(text) || (/अमित|रोहन|amit|rohan/i.test(text) && /शहर|city|रहते|मिलो/i.test(text))) {
+        return 'modern Indian city street with simple buildings and a ground line';
+    }
+    if (/savings|बचत|financial situation|लाख|रुपय/i.test(text)) {
+        return 'simple home interior with a table and two equal savings jars, ground line visible';
+    }
+    if (/income|salary|वेतन|आय/i.test(lower) && !/मिलो|शहर|उम्र/i.test(text)) {
+        return 'simple home table scene with equal income props and a ground line';
+    }
+    if (/compound|interest|ब्याज|चक्रवृद्धि/i.test(text)) return 'bank hall with a large growth chart on the wall and a ground line';
+    if (/fame|spotlight|stage|टीवी|tv|celebrity/i.test(text)) return 'stage with spotlight and media props';
     if (/follower|social|phone|million/.test(lower)) return 'social media feed backdrop';
     if (/misunderstanding|confused|गलतफहमी|भ्रम/.test(lower)) return 'diagram board with tangled arrows';
     if (/\bhouse|home|same house|grew up\b/.test(lower)) return 'suburban house';
@@ -335,7 +427,7 @@ function inferEnvironment(text) {
     if (/\boffice|work|business\b/.test(lower)) return 'simple office';
     if (/\bstore|shop|buy\b/.test(lower)) return 'store';
     if (/\bschool|college|university\b/.test(lower)) return 'school building or campus';
-    return 'simplified explainer stage with large concept props';
+    return 'simplified explainer environment with a visible ground line';
 }
 
 /**
@@ -351,7 +443,8 @@ function inferEmotion(text, sceneType) {
     if (/\bworried|concern|expensive|payment|cost\b/.test(lower)) return 'concerned';
     if (/\bhappy|save|success|win\b/.test(lower)) return 'positive';
     if (/\bcompare|versus|difference\b/.test(lower)) return 'analytical';
-    if (sceneType === 'introduction') return 'friendly';
+    if (/सोच|attitude|mindset|अलग|stability/i.test(text)) return 'contrasting';
+    if (/मिलो|meet|introduc|परिचय/i.test(text)) return 'friendly';
     return 'neutral';
 }
 

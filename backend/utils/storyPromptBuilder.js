@@ -1,7 +1,6 @@
 /**
  * Story + stickman image prompt assembly.
- * Conceptual objects and narration lead; stickman character is locked but never
- * the only thing in the frame.
+ * Scene-specific content leads; style rules follow in compact form.
  */
 
 const { FAL_STYLE_ANCHOR } = require('../config/imageStyleGuide');
@@ -11,123 +10,92 @@ const {
     sanitizeSceneVisual,
 } = require('./stickmanPrompt');
 
-const CONCEPT_MANDATE = `CONCEPTUAL STORY MANDATE — the image MUST show the narration idea with large visible metaphor objects, icons, shapes, and a clear setting. Stickman is part of the scene, NEVER alone on a blank background. Fill the frame: character + 2–4 big concept objects (coin stacks, growth curves, piggy banks, calendars, arrows, comparison panels, thought bubbles with symbols). Empty solid-color backgrounds with only characters are FORBIDDEN.`;
+const CONCEPT_MANDATE = `Draw ONLY what the current scene narration describes. Use natural visual storytelling through characters, pose, and environment — not financial infographic boards unless this narration explicitly mentions money, savings, income, or finance.`;
 
-const NO_TEXT_MANDATE = `NO TEXT — this image contains zero written words, letters, digits, captions, or signage. No Devanagari, no Chinese, no Japanese, no fake or gibberish lettering. Explain everything through drawings: symbols, icons, coin stacks, arrows, charts, expression, and pose.`;
+const VISUAL_STORYBOARD_RULE = `Show only what this scene narration says. Named characters appear together when the narration describes them together.`;
 
-/**
- * Diffusion models invent gibberish whenever writing is implied, so exactly one
- * short pre-approved label is permitted and every other glyph is forbidden.
- */
+const VISUAL_SIMPLICITY_RULE = `One clear primary subject, 2-5 meaningful elements, characters carry the story when possible.`;
+
+const NO_TEXT_MANDATE = `Full-color pictorial scene with no writing, lettering, numbers, or text-like symbols anywhere. Communicate meaning only through colorful characters, poses, objects, and environment.`;
+
 function buildTextMandate(label) {
     if (!label) return NO_TEXT_MANDATE;
-
-    return `STRICT TEXT RULE — the image may contain EXACTLY ONE piece of text: "${label}". Render it exactly as written, spelled correctly, in clean bold uppercase sans-serif block letters, large and clearly readable, placed once on the single most relevant object (a chart, a jar, a screen, or a plain banner). ABSOLUTELY NO other text anywhere: no extra words, no sentences, no captions, no subtitles, no signage, no Devanagari, no Chinese, no Japanese, no random or gibberish letters, no watermark. If any other lettering would appear, leave that area blank instead. Everything else in the frame is explained by drawings only.`;
+    return `One visible label only: "${label}", spelled correctly in bold uppercase sans-serif on the most relevant object. No other writing anywhere.`;
 }
 
 function extractStorySections(fullPrompt) {
     const text = String(fullPrompt || '').trim();
     return {
-        narration: text.match(/NARRATION TO VISUALIZE: "([^"]*)"/)?.[1]?.trim() || '',
+        narration: text.match(/NARRATION TO VISUALIZE: ([^\n]+)/)?.[1]?.trim() || '',
+        characters: text.match(/CHARACTERS: ([^\n]+)/)?.[1]?.trim() || '',
+        action: text.match(/ACTION: ([^\n]+)/)?.[1]?.trim() || '',
+        environment: text.match(/ENVIRONMENT: ([^\n]+)/)?.[1]?.trim() || '',
         storyBeat: text.match(/STORY BEAT: ([^\n]+)/)?.[1]?.trim() || '',
         visualMetaphor: text.match(/VISUAL METAPHOR: ([^\n]+)/)?.[1]?.trim() || '',
-        conceptObjects: text.match(/CONCEPT OBJECTS \(must appear in frame\): ([^\n]+)/)?.[1]?.trim() || '',
-        sceneBlock: text.match(/SCENE \([^)]*\):\s*([\s\S]*?)(?:\n\nConsistency:|$)/)?.[1]?.trim() || '',
-        onImageLabel: text.match(/ON-IMAGE TEXT[^:]*: "([^"]*)"/)?.[1]?.trim() || '',
+        conceptObjects: text.match(/SCENE ELEMENTS \(only from this narration\): ([^\n]+)/)?.[1]?.trim()
+            || text.match(/CONCEPT OBJECTS \(must appear in frame\): ([^\n]+)/)?.[1]?.trim() || '',
+        sceneBlock: text.match(/SCENE:\s*([\s\S]*?)(?:\n\nConsistency:|$)/)?.[1]?.trim()
+            || text.match(/SCENE \([^)]*\):\s*([\s\S]*?)(?:\n\nConsistency:|$)/)?.[1]?.trim() || '',
+        onImageLabel: text.match(/VISIBLE TEXT[^:]*: "([^"]*)"/)?.[1]?.trim()
+            || text.match(/ON-IMAGE TEXT[^:]*: "([^"]*)"/)?.[1]?.trim() || '',
     };
 }
 
 function buildStoryLead(sections) {
-    const { narration, storyBeat, visualMetaphor, conceptObjects, sceneBlock } = sections;
+    const {
+        characters, action, environment,
+        storyBeat, visualMetaphor, conceptObjects, sceneBlock,
+    } = sections;
     const safeScene = sceneBlock ? sanitizeSceneVisual(sceneBlock) : '';
 
     return [
-        narration && `Illustrate this narration moment: "${narration}"`,
-        storyBeat && `The image must communicate: ${storyBeat}`,
-        visualMetaphor && `Visual metaphor to draw: ${visualMetaphor}`,
-        conceptObjects
-            ? `REQUIRED large metaphor objects (must dominate the frame): ${conceptObjects}`
-            : 'REQUIRED: invent 2–4 large metaphor objects that explain this narration (coin stacks, growth curves, arrows, calendars, containers).',
-        safeScene && `Scene composition: ${safeScene}`,
-        'Composition rule: Stickman stick figure reacts to / points at / stands among the concept objects. Objects take at least half the frame.',
-    ].filter(Boolean).join('\n\n');
+        characters && `Characters: ${characters}.`,
+        action && `Action: ${action}.`,
+        environment && `Environment: ${environment}.`,
+        storyBeat && `Story beat: ${storyBeat}.`,
+        visualMetaphor && `Visual focus: ${visualMetaphor}.`,
+        conceptObjects && `Include: ${conceptObjects}.`,
+        safeScene,
+    ].filter(Boolean).join(' ');
 }
 
 function buildStyleBlock(label) {
     return [
         FAL_STYLE_ANCHOR,
-        `Character: ${CHARACTER_SHORT}. Same stick figure if multiple characters.`,
-        '16:9 full-bleed explainer scene with a simplified but visible environment (not blank). Large flat icons and props explain the idea.',
-        label
-            ? `The only lettering in the whole image is the single label "${label}", spelled correctly in bold uppercase block letters.`
-            : 'The illustration is completely wordless — no lettering anywhere.',
+        `Stickman style: ${CHARACTER_SHORT}.`,
+        'Horizontal 16:9, full-color hand-drawn 2D explainer illustration with warm muted tones and accent colors, simple visible environment with ground line.',
+        label ? `Only visible writing: "${label}".` : 'No writing anywhere — communicate only through colorful drawings.',
     ].filter(Boolean).join(' ');
 }
 
+/** Avoid list uses only non-text priming terms — never mention scripts or lettering. */
 function buildStickmanAvoidList(negativePrompt, label) {
     const base = [
-        'gibberish text',
-        'fake letters',
-        'garbled writing',
-        'misspelled words',
-        'random characters',
-        'nonsense lettering',
-        'paragraphs of text',
-        'sentences',
-        'captions',
-        'subtitles',
-        'Chinese characters',
-        'Japanese characters',
-        'Korean characters',
-        'Devanagari',
-        'Hindi script',
-        'cluttered text everywhere',
-        'text on every object',
-        'watermark',
-        'logo',
-        'empty blank background',
-        'plain solid color only',
-        'characters alone with no props',
-        'no objects',
-        'no icons',
-        'character portrait only',
-        'realistic human',
-        'detailed cartoon man',
-        'detailed cartoon woman',
-        'vector character with hair',
-        'corporate infographic person',
-        'beard',
-        'webtoon character',
-        'anime character',
-        '3D render',
-        'photorealistic',
+        'black and white', 'grayscale', 'monochrome', 'sepia',
+        'financial infographic', 'presentation board', 'stock charts', 'cluttered infographic',
+        'plain solid color background', 'realistic human', 'detailed cartoon face', 'vector character with hair',
+        'photorealistic', '3D render', 'watermark',
     ];
-
-    if (!label) {
-        base.unshift('text', 'letters', 'numbers', 'labels', 'signage');
-    }
-
+    const textPriming = /\b(text|letter|caption|subtitle|devanagari|hindi|script|writing|signage|label|headline|typography|gibberish|fake)\b/i;
     const extra = negativePrompt
-        ? String(negativePrompt).split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 12)
+        ? String(negativePrompt).split('\n').map((s) => s.trim()).filter((s) => s && !textPriming.test(s)).slice(0, 6)
         : [];
     return [...new Set([...base, ...extra])].join(', ');
 }
 
 /**
- * @param {string} fullPrompt - Output of buildFinalImagePrompt
- * @param {{ negativePrompt?: string, compactStyle?: boolean }} [options]
+ * Scene-specific content FIRST so FLUX weights the narration beat over shared rules.
  */
 function buildStoryFirstPrompt(fullPrompt, options = {}) {
     const sections = extractStorySections(fullPrompt);
     const label = sections.onImageLabel || null;
     const storyLead = buildStoryLead(sections);
     const styleBlock = buildStyleBlock(label);
+    const rules = [CONCEPT_MANDATE, VISUAL_STORYBOARD_RULE, VISUAL_SIMPLICITY_RULE, STICKMAN_MANDATE].join(' ');
+    const textRule = buildTextMandate(label);
     const avoid = `Avoid: ${buildStickmanAvoidList(options.negativePrompt, label)}`;
 
-    // Text rule first: diffusion models invent gibberish unless the allowed text is pinned down
-    return [buildTextMandate(label), STICKMAN_MANDATE, CONCEPT_MANDATE, storyLead, styleBlock, avoid]
-        .filter(Boolean)
-        .join('\n\n');
+    return [storyLead, styleBlock, rules, textRule, avoid].filter(Boolean).join(' ');
 }
 
 module.exports = {
@@ -136,5 +104,7 @@ module.exports = {
     buildStoryLead,
     buildTextMandate,
     CONCEPT_MANDATE,
+    VISUAL_STORYBOARD_RULE,
+    VISUAL_SIMPLICITY_RULE,
     NO_TEXT_MANDATE,
 };

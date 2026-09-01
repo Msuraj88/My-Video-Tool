@@ -2,43 +2,33 @@
  * Approved on-image label.
  *
  * Diffusion models render gibberish when a prompt implies free-form writing, so the
- * pipeline permits at most ONE short label per image, derives it from the narration
- * itself, and only when the line genuinely needs a word highlighted. Most scenes get
- * no text at all — the drawing carries the meaning.
+ * pipeline defaults to wordless images. A label is only permitted when the narration
+ * explicitly requires visible text on screen.
  */
 
 /** Figures stay legible when longer; long words are where models start misspelling. */
 const MAX_FIGURE_LENGTH = 16;
 const MAX_WORD_LENGTH = 12;
 
-/**
- * Only these terms are worth burning into a frame. Anything outside this list is
- * explained by the illustration instead, which keeps text rare and intentional.
- */
-const HIGHLIGHT_TERMS = [
-    'compound', 'interest', 'salary', 'income', 'savings', 'investment',
-    'profit', 'loss', 'debt', 'loan', 'emi', 'budget', 'inflation', 'tax',
-    'fame', 'followers', 'recognition', 'brand', 'growth', 'risk',
+/** Narration must explicitly ask for visible writing — bare numbers/amounts do not qualify. */
+const EXPLICIT_TEXT_PATTERNS = [
+    /\b(screen|sign|board|poster|banner|label|title|caption|headline)\s+(shows?|reads?|says?|displays?|with)\b/i,
+    /\b(shows?|reads?|says?|displays?|writes?)\s+(the\s+)?(text|word|title|label|caption|headline)\b/i,
+    /\b(text|word|title|label|caption|headline)\s+(on|in)\s+(the\s+)?(screen|sign|board|poster|banner)\b/i,
+    /\bvisible\s+(text|writing|label|caption|title)\b/i,
+    /\bwritten\s+(on|in)\b/i,
+    /\bthat\s+(reads?|says?)\s*["']/i,
 ];
 
-/** Currency and percentage figures, normalised so they render cleanly. */
-function extractFigures(text) {
-    const source = String(text || '');
-    const found = [];
-
-    const rupee = source.match(/₹\s*[\d,]+(?:\.\d+)?/g);
-    if (rupee) found.push(...rupee.map((s) => s.replace(/\s+/g, '').replace('₹', 'Rs ')));
-
-    const dollar = source.match(/\$\s*[\d,]+(?:\.\d+)?/g);
-    if (dollar) found.push(...dollar.map((s) => s.replace(/\s+/g, '')));
-
-    const percent = source.match(/\d+(?:\.\d+)?\s*%/g);
-    if (percent) found.push(...percent.map((s) => s.replace(/\s+/g, '')));
-
-    const grouped = source.match(/\b\d{1,3}(?:,\d{2,3})+\b/g);
-    if (grouped) found.push(...grouped);
-
-    return [...new Set(found)];
+/**
+ * Returns true only when narration explicitly requires visible text in the image.
+ * @param {string} narration
+ * @returns {boolean}
+ */
+function narrationRequiresVisibleText(narration) {
+    const line = String(narration || '').trim();
+    if (!line) return false;
+    return EXPLICIT_TEXT_PATTERNS.some((p) => p.test(line));
 }
 
 /** Keeps only characters an image model can spell reliably. */
@@ -63,18 +53,17 @@ function appearsInNarration(label, narration) {
     return needle.length > 0 && haystack.includes(needle);
 }
 
-function findHighlightTerm(text) {
-    const lower = String(text || '').toLowerCase();
-    return HIGHLIGHT_TERMS.find((term) => new RegExp(`\\b${term}\\b`).test(lower)) || null;
+/** Extract quoted text the narration explicitly names for on-screen display. */
+function extractExplicitQuotedText(narration) {
+    const match = String(narration || '').match(/(?:reads?|says?|shows?|displays?|writes?)\s+"([^"]{1,16})"/i);
+    if (!match) return null;
+    const label = toRenderableAscii(match[1]).toUpperCase();
+    return withinLimit(label) ? label : null;
 }
 
 /**
  * Picks the single label allowed on this scene's image, or null when the frame
- * should stay wordless.
- *
- * A figure (amount, percentage) always qualifies because numbers cannot be drawn
- * precisely. A word only qualifies when the visual plan asked for it AND it is a
- * recognised highlight term AND it literally appears in the narration.
+ * should stay wordless (the default).
  *
  * @param {string} narration - Raw narration line for the scene.
  * @param {string|null} plannedLabel - Optional label proposed by the visual plan.
@@ -83,59 +72,41 @@ function findHighlightTerm(text) {
 function buildApprovedLabel(narration, plannedLabel = null) {
     const line = String(narration || '');
 
-    const figure = extractFigures(line).map(toRenderableAscii).find((f) => f && withinLimit(f.toUpperCase()));
-    if (figure) return figure.toUpperCase();
+    if (!narrationRequiresVisibleText(line)) return null;
+
+    const quoted = extractExplicitQuotedText(line);
+    if (quoted) return quoted;
 
     if (!plannedLabel) return null;
 
     const planned = toRenderableAscii(plannedLabel).toUpperCase();
     if (!planned || !withinLimit(planned)) return null;
     if (!appearsInNarration(planned, line)) return null;
-    if (!findHighlightTerm(planned)) return null;
 
     return planned;
 }
 
 /**
- * Text loses its impact when every frame carries a label, so labels are thinned out
- * across the timeline: never on consecutive scenes, and never on more than a third
- * of the video. Figures are kept because they carry information nothing else can.
+ * Strips labels from scenes that do not explicitly require visible text.
  *
  * @param {Array<{textOnImage?: string|null, concept?: string}>} plannedScenes
  * @param {Array<{text?: string}>} scenes
  * @returns {Array} plannedScenes with surplus labels removed
  */
 function thinOutLabels(plannedScenes, scenes = []) {
-    const maxLabelled = Math.max(1, Math.ceil(plannedScenes.length / 3));
-    let used = 0;
-    let previousHadLabel = false;
-
     return plannedScenes.map((planned, index) => {
-        const label = planned.textOnImage;
-        if (!label) {
-            previousHadLabel = false;
-            return planned;
-        }
-
         const narration = scenes[index]?.text || '';
-        const isFigure = /\d/.test(label);
-
-        const allowed = isFigure || (!previousHadLabel && used < maxLabelled);
-        if (!allowed) {
-            previousHadLabel = false;
+        if (!narrationRequiresVisibleText(narration)) {
             return { ...planned, textOnImage: null };
         }
-
-        used += 1;
-        previousHadLabel = true;
-        return { ...planned, textOnImage: buildApprovedLabel(narration, label) };
+        return { ...planned, textOnImage: buildApprovedLabel(narration, planned.textOnImage) };
     });
 }
 
 module.exports = {
     buildApprovedLabel,
     thinOutLabels,
-    extractFigures,
+    narrationRequiresVisibleText,
     toRenderableAscii,
     MAX_FIGURE_LENGTH,
     MAX_WORD_LENGTH,

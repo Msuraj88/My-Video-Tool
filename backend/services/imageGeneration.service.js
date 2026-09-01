@@ -4,20 +4,23 @@ const { frameImageForVideo, TARGET_WIDTH, TARGET_HEIGHT } = require('../utils/im
 const { imagesDir } = require('../utils/tempDirs');
 const { buildStoryFirstPrompt } = require('../utils/storyPromptBuilder');
 
-// FLUX_MODEL: "schnell" (default), "flux2pro", "pro1.1", "pro", "dev". Override via FLUX_MODEL in .env.
-const FLUX_MODEL = (process.env.FLUX_MODEL || 'schnell').toLowerCase();
+// FLUX_MODEL: "klein9b" (default), "schnell", "flux2pro", "pro1.1", "pro", "dev". Override via FLUX_MODEL in .env.
+const FLUX_MODEL = (process.env.FLUX_MODEL || 'klein9b').toLowerCase();
 const FAL_ENDPOINTS = {
+    klein9b: 'https://fal.run/fal-ai/flux-2/klein/9b',
     flux2pro: 'https://fal.run/fal-ai/flux-2-pro',
     pro11: 'https://fal.run/fal-ai/flux-pro/v1.1',
     schnell: 'https://fal.run/fal-ai/flux/schnell',
     dev: 'https://fal.run/fal-ai/flux/dev',
     pro: 'https://fal.run/fal-ai/flux/pro'
 };
-const fluxEndpoint = process.env.FAL_FLUX_ENDPOINT || FAL_ENDPOINTS[FLUX_MODEL] || FAL_ENDPOINTS.schnell;
-// Schnell: Fal examples use 8–10 steps; 4 is fast but drifts style. Override with FLUX_INFERENCE_STEPS.
+const fluxEndpoint = process.env.FAL_FLUX_ENDPOINT || FAL_ENDPOINTS[FLUX_MODEL] || FAL_ENDPOINTS.klein9b;
+// Schnell: Fal examples use 8–10 steps; Klein 9B defaults to 4. Override with FLUX_INFERENCE_STEPS.
 const numInferenceSteps = (FLUX_MODEL === 'schnell')
     ? (parseInt(process.env.FLUX_INFERENCE_STEPS, 10) || 8)
-    : (parseInt(process.env.FLUX_INFERENCE_STEPS, 10) || 35);
+    : (FLUX_MODEL === 'klein9b')
+        ? (parseInt(process.env.FLUX_INFERENCE_STEPS, 10) || 4)
+        : (parseInt(process.env.FLUX_INFERENCE_STEPS, 10) || 35);
 const isFlux2OrPro11 = FLUX_MODEL === 'flux2pro' || FLUX_MODEL === 'pro11';
 
 const { generateAndSaveSceneImageGoogle } = require('./googleImage.service');
@@ -116,8 +119,10 @@ function buildFluxPrompt(fullPrompt, negativePrompt) {
 
 async function _doGenerateFal(prompt, sceneName, options, apiKey) {
     const fluxPrompt = buildFluxPrompt(prompt, options.negativePrompt);
-    console.log(`[FAL] Stickman lead (${sceneName}): ${fluxPrompt.split('\n\n')[0].slice(0, 220).replace(/\s+/g, ' ')}...`);
-    console.log(`Generating image for scene: ${sceneName} (model: ${FLUX_MODEL}, endpoint: ${fluxEndpoint.replace(/^(https?:\/\/[^/]+).*/, '$1')})`);
+    const sceneLeadEnd = Math.min(fluxPrompt.indexOf('Stickman style:') > 0 ? fluxPrompt.indexOf('Stickman style:') : fluxPrompt.length, 600);
+    console.log(`[FAL] Scene prompt lead (${sceneName}): ${fluxPrompt.slice(0, sceneLeadEnd).replace(/\s+/g, ' ').trim()}`);
+    console.log(`[FAL] Final prompt length: ${fluxPrompt.length} chars, model: ${FLUX_MODEL}`);
+    console.log(`[FAL] Generating image for scene: ${sceneName} (endpoint: ${fluxEndpoint}, seed in body)`);
     const imageSize = { width: TARGET_WIDTH, height: TARGET_HEIGHT };
     let body;
     if (isFlux2OrPro11) {

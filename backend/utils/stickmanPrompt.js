@@ -22,34 +22,28 @@ const REPLACEMENTS = [
     [/\bcorporate (infographic )?character\b/gi, `${CHARACTER_NAME} stick figure`],
 ];
 
-/**
- * Any hint of writing in the brief makes diffusion models render gibberish letters,
- * so references to text are rewritten into symbol-only equivalents.
- */
-const TEXT_REPLACEMENTS = [
-    [/\b(a |the )?(sign|signboard|banner|poster|billboard|placard|nameplate|plaque)s?\s+(that\s+)?(reading|saying|says|labell?ed|with the (word|text)s?)[^,.]*/gi, 'a symbol icon'],
-    [/\b(labell?ed|labeled|marked|titled|captioned|inscribed|that says|reading)\s+"[^"]*"/gi, 'marked with a symbol'],
-    [/\b(labell?ed|labeled|marked|titled|captioned|inscribed|that says|reading)\s+[^,.]*/gi, 'marked with a symbol'],
-    [/\b(text|caption|subtitle|headline|title|word|words|letter|letters|writing|handwriting|typography|font)s?\b/gi, 'symbol'],
-    [/\bspeech bubble[^,.]*/gi, 'thought bubble containing a small drawn symbol'],
-    [/\bthought bubble (with|containing) (the )?(symbol|words?|text)[^,.]*/gi, 'thought bubble containing a small drawn symbol'],
-    [/\bnumbers?\b/gi, 'drawn quantity'],
-    [/\bdigits?\b/gi, 'drawn quantity'],
-    [/\b(display|showing|shows|reads)\s+"[^"]*"/gi, 'showing a symbol'],
-    [/"[^"]{0,40}"/g, 'a symbol'],
+/** Strip text-bearing visual references entirely — do not replace with bubbles or symbols. */
+const TEXT_STRIP_PATTERNS = [
+    /\b(a |the )?(sign|signboard|banner|poster|billboard|placard|nameplate|plaque|name tag)s?\s+[^,.]*/gi,
+    /\b(labell?ed|labeled|marked|titled|captioned|inscribed|that says|reading)\s+[^,.]*/gi,
+    /\b(speech|thought)\s+bubble[^,.]*/gi,
+    /\b(caption|subtitle|headline|title card|typography|font)s?\b[^,.]*/gi,
+    /\b(chart|graph|diagram|infographic|presentation)\s+(with|showing|displaying)\s+[^,.]*/gi,
+    /\b(screen|monitor|TV)\s+(showing|displaying|with)\s+[^,.]*/gi,
+    /\b(document|statement|invoice|receipt|contract)\s+(with|showing|reading)\s+[^,.]*/gi,
 ];
 
 function stripTextReferences(text) {
     let out = String(text || '');
-    for (const [pattern, replacement] of TEXT_REPLACEMENTS) {
-        out = out.replace(pattern, replacement);
+    for (const pattern of TEXT_STRIP_PATTERNS) {
+        out = out.replace(pattern, '');
     }
-    return out;
+    return out.replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',').trim();
 }
 
 function sanitizeSceneVisual(text) {
     let out = String(text || '').trim();
-    if (!out) return `${CHARACTER_NAME} stick figure in a simplified setting with large metaphor objects.`;
+    if (!out) return `${CHARACTER_NAME} stick figure in a simplified setting with a visible environment.`;
 
     for (const [pattern, replacement] of REPLACEMENTS) {
         out = out.replace(pattern, replacement);
@@ -85,9 +79,15 @@ function enforceStickmanSceneVisual(sceneVisual, narration = '') {
 function buildStickmanFallback(narration = '') {
     const line = String(narration || '').trim();
     if (!line) {
-        return `${CHARACTER_NAME} stick figure stands beside large concept icons and a diagram board. Round head, stick limbs, waistcoat, bow tie. Objects fill half the frame.`;
+        return `${CHARACTER_NAME} stick figure in a simple environment with a ground line. Round head, stick limbs, waistcoat, bow tie.`;
     }
-    return `${CHARACTER_NAME} stick figure reacts to the narration among large metaphor objects that illustrate: ${line.slice(0, 120)}. Round head, stick limbs, waistcoat, bow tie. Visible setting with props — not blank. No realistic humans.`;
+    try {
+        const { generateSceneDirection } = require('../services/sceneDirector');
+        const direction = generateSceneDirection(line);
+        return `${direction.characters}, ${direction.action}, in ${direction.environment}. Mood: ${direction.emotion}. Stickman style, round head, stick limbs, waistcoat, bow tie.`;
+    } catch (_) {
+        return `${CHARACTER_NAME} stick figure acting out the scene moment. Round head, stick limbs, waistcoat, bow tie. Simple visible environment.`;
+    }
 }
 
 module.exports = {

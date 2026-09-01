@@ -3,12 +3,12 @@
  * Stick figure character + rich conceptual infographic props — never empty character-only frames.
  */
 
-const STYLE_LOCK = `STYLE LOCK — stick figure explainer infographic. Simple black-ink Stickman stick figure (round head, stick limbs, waistcoat, bow tie) PLUS large clear concept objects that explain the narration (coin stacks, growth curves, snowballs, piggy banks, arrows, comparison panels, icons). Flat 2D shapes, bold outlines, muted cool blues/grays with a few accent colors on icons. Always a simplified environment with a ground line. NEVER empty solid background with only characters. NEVER detailed vector humans. At most ONE short correctly-spelled label in bold uppercase block letters — never sentences, captions, or gibberish. 16:9 full-bleed storyboard frame.`;
+const STYLE_LOCK = `STYLE LOCK — clean hand-drawn 2D stick figure explainer illustration in full color (not black and white). Simple Stickman stick figure (round white head, stick limbs, black waistcoat, white shirt, bow tie) in a clear scene with 2-5 meaningful elements. Flat 2D shapes, bold black outlines, warm muted palette with accent colors — soft cream and tan backgrounds, gentle greens and blues, pink piggy banks, golden coins, colored jars and props. Natural visual storytelling through characters, pose, and environment. Simplified colorful environment with a ground line. No writing anywhere unless the narration explicitly requires visible text. Horizontal 16:9 full-bleed storyboard frame.`;
 
 const VISUAL_STYLE_BLOCK = STYLE_LOCK;
 
 /** Short Fal/Google style anchor. */
-const FAL_STYLE_ANCHOR = `Minimalist stick figure doodle explainer infographic — like xkcd stick figures inside a rich conceptual storyboard. Stickman (round head, stick limbs, waistcoat, bow tie) interacting with large metaphor objects, icons, and shapes that explain the idea. Simplified environment with a ground line behind them. At most one short, correctly spelled uppercase label. NOT blank background. NOT character portrait only. NOT detailed vector human. NOT photorealistic. NOT 3D. NOT anime.`;
+const FAL_STYLE_ANCHOR = `Colorful minimalist stick figure doodle explainer illustration — warm muted full-color palette with bold black outlines, not grayscale or monochrome. Clear storyboard scene with 2-5 meaningful elements. Stickman (round head, stick limbs, waistcoat, bow tie) in a simple but colorful environment with a ground line — cream walls, tan furniture, green accents, golden coins, pink props where relevant. NOT black and white. NOT a financial presentation board. NOT blank background. NOT character portrait only. NOT detailed vector human. NOT photorealistic. NOT 3D. NOT anime.`;
 
 const STYLE_AVOID = `Avoid:
 gibberish text

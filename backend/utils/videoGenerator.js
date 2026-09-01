@@ -12,8 +12,8 @@ const POST_AUDIO_BUFFER_SECONDS = 0.25;
 const AUDIO_FADE_DURATION = 0.03;
 /** Match zoompan's default output rate (this FFmpeg build is from 2018). */
 const VIDEO_FPS = 25;
-/** Very slight Ken Burns zoom (4%). */
-const ZOOM_AMOUNT = 0.04;
+/** Ken Burns zoom depth (10% — noticeable in/out per scene). */
+const ZOOM_AMOUNT = 0.10;
 const ZOOM_SOURCE_WIDTH = TARGET_WIDTH * 4;
 const ZOOM_SOURCE_HEIGHT = TARGET_HEIGHT * 4;
 
