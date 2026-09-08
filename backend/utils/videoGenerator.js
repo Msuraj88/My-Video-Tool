@@ -8,8 +8,17 @@ const { TARGET_WIDTH, TARGET_HEIGHT } = require('./imageFraming');
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
-const POST_AUDIO_BUFFER_SECONDS = 0.25;
-const AUDIO_FADE_DURATION = 0.03;
+/**
+ * Extra silence after each scene's narration. Keep at 0 so continuous batch
+ * narration does not pause/flick between scenes. Frame alignment below already
+ * pads at most one video frame (~40ms) when needed.
+ */
+const POST_AUDIO_BUFFER_SECONDS = 0;
+/**
+ * Per-scene fade was dipping volume at every join. Continuous split narration
+ * already cuts on natural pauses, so fades are not needed for smoothness.
+ */
+const AUDIO_FADE_DURATION = 0;
 /** Match zoompan's default output rate (this FFmpeg build is from 2018). */
 const VIDEO_FPS = 25;
 /** Ken Burns zoom depth (10% — noticeable in/out per scene). */
@@ -57,20 +66,21 @@ function createSceneVideo(imagePath, audioPath, sceneName, options = {}) {
                 console.warn(`Could not determine audio duration for ${sceneName} (logging only):`, err.message);
             }
 
-            // Snap to a whole frame so the audio and video streams end on the exact same
-            // timestamp. Fractional-frame clips leave a sub-frame gap that the concat
-            // demuxer accumulates, drifting narration ahead of the images over a long video.
-            const rawDuration = audioDurationSec + POST_AUDIO_BUFFER_SECONDS;
-            const videoDurationSec = Math.round(rawDuration * VIDEO_FPS) / VIDEO_FPS;
-            const fadeOutStart = Math.max(0, videoDurationSec - AUDIO_FADE_DURATION);
-            // apad fills the trailing buffer with silence so the audio stream is exactly
-            // as long as the video stream rather than ending early.
-            const afilter = [
-                `afade=t=in:st=0:d=${AUDIO_FADE_DURATION}`,
-                `afade=t=out:st=${fadeOutStart}:d=${AUDIO_FADE_DURATION}`,
-                'apad',
-                'aresample=48000:async=1:first_pts=0',
-            ].join(',');
+            // Snap UP to a whole frame so we never truncate speech. Rounding down
+            // clipped the last syllable; rounding nearest sometimes shortened clips
+            // and left a concat gap that sounded like a voice flick between scenes.
+            const rawDuration = Math.max(audioDurationSec + POST_AUDIO_BUFFER_SECONDS, 1 / VIDEO_FPS);
+            const videoDurationSec = Math.ceil(rawDuration * VIDEO_FPS) / VIDEO_FPS;
+            // apad fills any sub-frame remainder so audio length matches video exactly.
+            const afilterParts = ['apad', 'aresample=48000:async=1:first_pts=0'];
+            if (AUDIO_FADE_DURATION > 0) {
+                const fadeOutStart = Math.max(0, videoDurationSec - AUDIO_FADE_DURATION);
+                afilterParts.unshift(
+                    `afade=t=in:st=0:d=${AUDIO_FADE_DURATION}`,
+                    `afade=t=out:st=${fadeOutStart}:d=${AUDIO_FADE_DURATION}`
+                );
+            }
+            const afilter = afilterParts.join(',');
             const vfilter = buildKenBurnsFilter(direction, videoDurationSec);
 
             ffmpeg()
@@ -145,7 +155,13 @@ function concatenateVideos(videoPaths, outputPath) {
                 '-fflags', '+genpts',
             ])
             .outputOptions([
-                '-c copy', // Stream copy, NO re-encoding
+                // Keep video bitstream as-is; re-encode audio so AAC packet
+                // boundaries do not leave a micro-gap / flick at each scene join.
+                '-c:v', 'copy',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-ar', '48000',
+                '-ac', '2',
                 '-avoid_negative_ts', 'make_zero',
                 '-max_interleave_delta', '0',
             ])
